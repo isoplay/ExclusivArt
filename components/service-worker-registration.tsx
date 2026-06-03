@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 
-const SERVICE_WORKER_VERSION = '2026-06-01-v5'
+const SERVICE_WORKER_VERSION = '2026-06-02-v6'
 const RELOAD_MARKER = `sw-reloaded-${SERVICE_WORKER_VERSION}`
 
 export function ServiceWorkerRegistration() {

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'exclusiv-art-v5'
+const CACHE_NAME = 'exclusiv-art-v6'
 const PRECACHE_ASSETS = [
   '/offline',
   '/manifest.json',

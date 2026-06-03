@@ -1,16 +1,16 @@
 # Graph Report - v0-erp-para-artesanato-main  (2026-06-02)
 
 ## Corpus Check
-- 140 files · ~78,621 words
+- 141 files · ~79,549 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1217 nodes · 2250 edges · 76 communities (68 shown, 8 thin omitted)
+- 1236 nodes · 2286 edges · 66 communities (62 shown, 4 thin omitted)
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `45735c3d`
+- Built from commit: `e28f93f9`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -35,11 +35,9 @@
 - [[_COMMUNITY_Community 17|Community 17]]
 - [[_COMMUNITY_Community 18|Community 18]]
 - [[_COMMUNITY_Community 19|Community 19]]
-- [[_COMMUNITY_Community 20|Community 20]]
 - [[_COMMUNITY_Community 21|Community 21]]
 - [[_COMMUNITY_Community 22|Community 22]]
 - [[_COMMUNITY_Community 23|Community 23]]
-- [[_COMMUNITY_Community 24|Community 24]]
 - [[_COMMUNITY_Community 25|Community 25]]
 - [[_COMMUNITY_Community 26|Community 26]]
 - [[_COMMUNITY_Community 27|Community 27]]
@@ -51,17 +49,13 @@
 - [[_COMMUNITY_Community 33|Community 33]]
 - [[_COMMUNITY_Community 34|Community 34]]
 - [[_COMMUNITY_Community 35|Community 35]]
-- [[_COMMUNITY_Community 36|Community 36]]
-- [[_COMMUNITY_Community 37|Community 37]]
 - [[_COMMUNITY_Community 38|Community 38]]
 - [[_COMMUNITY_Community 39|Community 39]]
-- [[_COMMUNITY_Community 40|Community 40]]
 - [[_COMMUNITY_Community 41|Community 41]]
 - [[_COMMUNITY_Community 42|Community 42]]
 - [[_COMMUNITY_Community 43|Community 43]]
 - [[_COMMUNITY_Community 44|Community 44]]
 - [[_COMMUNITY_Community 45|Community 45]]
-- [[_COMMUNITY_Community 46|Community 46]]
 - [[_COMMUNITY_Community 47|Community 47]]
 - [[_COMMUNITY_Community 48|Community 48]]
 - [[_COMMUNITY_Community 49|Community 49]]
@@ -69,17 +63,13 @@
 - [[_COMMUNITY_Community 51|Community 51]]
 - [[_COMMUNITY_Community 52|Community 52]]
 - [[_COMMUNITY_Community 53|Community 53]]
-- [[_COMMUNITY_Community 54|Community 54]]
 - [[_COMMUNITY_Community 55|Community 55]]
 - [[_COMMUNITY_Community 56|Community 56]]
-- [[_COMMUNITY_Community 57|Community 57]]
 - [[_COMMUNITY_Community 58|Community 58]]
 - [[_COMMUNITY_Community 59|Community 59]]
 - [[_COMMUNITY_Community 60|Community 60]]
-- [[_COMMUNITY_Community 61|Community 61]]
 - [[_COMMUNITY_Community 62|Community 62]]
 - [[_COMMUNITY_Community 63|Community 63]]
-- [[_COMMUNITY_Community 64|Community 64]]
 - [[_COMMUNITY_Community 66|Community 66]]
 - [[_COMMUNITY_Community 67|Community 67]]
 - [[_COMMUNITY_Community 68|Community 68]]
@@ -106,16 +96,16 @@
   app/dashboard/estoque/actions.ts → lib/auth.ts
 - `getMovimentacoes()` --calls--> `createAuthenticatedClient()`  [EXTRACTED]
   app/dashboard/estoque/actions.ts → lib/auth.ts
-- `getPedido()` --calls--> `createAuthenticatedClient()`  [EXTRACTED]
-  app/dashboard/pedidos/actions.ts → lib/auth.ts
-- `getProdutosAtivos()` --calls--> `createAuthenticatedClient()`  [EXTRACTED]
-  app/dashboard/pedidos/actions.ts → lib/auth.ts
+- `getMateriais()` --calls--> `createAuthenticatedClient()`  [EXTRACTED]
+  app/dashboard/produtos/actions.ts → lib/auth.ts
+- `calcularCustoProduto()` --calls--> `createAuthenticatedClient()`  [EXTRACTED]
+  app/dashboard/produtos/actions.ts → lib/auth.ts
 
-## Communities (76 total, 8 thin omitted)
+## Communities (66 total, 4 thin omitted)
 
 ### Community 0 - "Community 0"
-Cohesion: 0.07
-Nodes (64): statusLabels, statusStyles, BeforeInstallPromptEvent, ComponentesConfigProps, MaodebraConfigProps, EstoqueContent(), getEstoqueAtual(), getPreviewImageUrl() (+56 more)
+Cohesion: 0.06
+Nodes (73): statusLabels, statusStyles, ProductionCheckerProps, BeforeInstallPromptEvent, ComponentesConfigProps, MaodebraConfigProps, EstoqueContent(), getEstoqueAtual() (+65 more)
 
 ### Community 1 - "Community 1"
 Cohesion: 0.06
@@ -154,8 +144,8 @@ Cohesion: 0.06
 Nodes (33): 1️⃣ **Pré-requisitos**, 2️⃣ **Instalação Local**, 3️⃣ **Configurar Supabase**, 4️⃣ **Rodar Aplicação**, 5️⃣ **Produção (Build)**, a) Criar Projeto Supabase, Android (Chrome/Samsung Internet), b) Executar Migrations (+25 more)
 
 ### Community 10 - "Community 10"
-Cohesion: 0.09
-Nodes (24): getPedidosComEntrega(), PedidoCalendario, CalendarioContent(), CalendarioPage(), getDashboardMetrics(), getEstoqueAtual(), toNumber(), DashboardPage() (+16 more)
+Cohesion: 0.08
+Nodes (25): getPedidosComEntrega(), PedidoCalendario, CalendarioContent(), CalendarioPage(), getEstoqueAtual(), toNumber(), searchGlobal(), SearchResult (+17 more)
 
 ### Community 11 - "Community 11"
 Cohesion: 0.07
@@ -163,15 +153,15 @@ Nodes (28): 10. **Testes de Performance**, 1. **Testes de Autenticação**, 2. *
 
 ### Community 12 - "Community 12"
 Cohesion: 0.10
-Nodes (23): ClienteAutocompleteProps, ClienteHistorico, deletePedido(), getCategoriasComComponentes(), getMateriaisBaixaPedido(), getMateriaisDisponiveis(), getPedido(), getPedidoItemMateriais() (+15 more)
+Nodes (37): ClienteAutocompleteProps, createAuthenticatedClient(), arredondarParaCimaMeioReal(), addMateriaisAoPedidoItem(), ClienteHistorico, createPedido(), createPedidoCustomizado(), deletePedido() (+29 more)
 
 ### Community 13 - "Community 13"
 Cohesion: 0.09
 Nodes (18): AlertDialogAction(), AlertDialogCancel(), AlertDialogContent(), AlertDialogDescription(), AlertDialogFooter(), AlertDialogHeader(), AlertDialogOverlay(), AlertDialogTitle() (+10 more)
 
 ### Community 14 - "Community 14"
-Cohesion: 0.13
-Nodes (20): calcularCustoProduto(), ComposicaoInput, createProduto(), CustoProdutoCalculado, deleteProduto(), duplicateProduto(), getComposicaoProduto(), getMateriais() (+12 more)
+Cohesion: 0.15
+Nodes (18): calcularCustoProduto(), ComposicaoInput, createProduto(), CustoProdutoCalculado, deleteProduto(), duplicateProduto(), getComposicaoProduto(), getMateriais() (+10 more)
 
 ### Community 15 - "Community 15"
 Cohesion: 0.10
@@ -190,28 +180,20 @@ Cohesion: 0.13
 Nodes (16): ButtonGroup(), ButtonGroupSeparator(), ButtonGroupText(), buttonGroupVariants, Field(), FieldContent(), FieldDescription(), FieldError() (+8 more)
 
 ### Community 19 - "Community 19"
-Cohesion: 0.14
-Nodes (16): SidebarContext, SidebarContextProps, SidebarGroupAction(), SidebarGroupLabel(), SidebarInput(), SidebarMenuAction(), SidebarMenuBadge(), SidebarMenuSkeleton() (+8 more)
-
-### Community 20 - "Community 20"
-Cohesion: 0.22
-Nodes (17): createAuthenticatedClient(), arredondarParaCimaMeioReal(), addMateriaisAoPedidoItem(), createPedido(), createPedidoCustomizado(), resolveItemMateriais(), updatePedido(), validatePedidoBasico() (+9 more)
+Cohesion: 0.06
+Nodes (45): AppSidebar(), menuItems, FloatingActionButton(), GlobalSearch(), PWAInstallPrompt(), useIsMobile(), Sheet(), SheetContent() (+37 more)
 
 ### Community 21 - "Community 21"
 Cohesion: 0.11
 Nodes (17): aliases, components, hooks, lib, ui, utils, iconLibrary, rsc (+9 more)
 
 ### Community 22 - "Community 22"
-Cohesion: 0.15
-Nodes (12): asNumber(), buildPath(), DashboardContent(), DashboardMetrics, FinanceiroDia, FinancialCard(), formatCurrency(), getEstoqueAtual() (+4 more)
+Cohesion: 0.07
+Nodes (28): asNumber(), buildPath(), buildResumoMensagem(), DashboardContent(), DashboardMetrics, FinanceiroDia, FinancialCard(), formatCurrency() (+20 more)
 
 ### Community 23 - "Community 23"
 Cohesion: 0.12
 Nodes (11): Menubar(), MenubarCheckboxItem(), MenubarContent(), MenubarItem(), MenubarLabel(), MenubarRadioItem(), MenubarSeparator(), MenubarShortcut() (+3 more)
-
-### Community 24 - "Community 24"
-Cohesion: 0.15
-Nodes (15): AppSidebar(), menuItems, Sidebar(), SidebarContent(), SidebarFooter(), SidebarGroup(), SidebarGroupContent(), SidebarHeader() (+7 more)
 
 ### Community 25 - "Community 25"
 Cohesion: 0.19
@@ -234,16 +216,16 @@ Cohesion: 0.27
 Nodes (10): createDespesa(), deleteDespesa(), getDespesas(), getFinanceiroResumo(), updateDespesa(), FinanceiroPage(), getDecimalSeparator(), isThousandsOnly() (+2 more)
 
 ### Community 30 - "Community 30"
-Cohesion: 0.19
-Nodes (9): ChartConfig, ChartContainer(), ChartContext, ChartContextProps, ChartLegendContent(), ChartTooltipContent(), sanitizeCssIdentifier(), THEMES (+1 more)
+Cohesion: 0.14
+Nodes (13): ChartConfig, ChartContainer(), ChartContext, ChartContextProps, ChartLegendContent(), ChartLegendContentProps, ChartTooltipContent(), ChartTooltipContentProps (+5 more)
 
 ### Community 31 - "Community 31"
 Cohesion: 0.17
 Nodes (7): DropdownMenuCheckboxItem(), DropdownMenuLabel(), DropdownMenuRadioItem(), DropdownMenuSeparator(), DropdownMenuShortcut(), DropdownMenuSubContent(), DropdownMenuSubTrigger()
 
 ### Community 32 - "Community 32"
-Cohesion: 0.27
-Nodes (11): createMaterial(), deleteMaterial(), getMaterial(), getMovimentacoes(), getSafeImageExtension(), getSafeImageUrl(), registrarMovimentacao(), updateMaterial() (+3 more)
+Cohesion: 0.22
+Nodes (14): createMaterial(), deleteMaterial(), getImageContentType(), getMaterial(), getMovimentacoes(), getSafeImageExtension(), getSafeImageUrl(), ImageUploadResult (+6 more)
 
 ### Community 33 - "Community 33"
 Cohesion: 0.23
@@ -257,14 +239,6 @@ Nodes (9): Command(), CommandDialog(), CommandEmpty(), CommandGroup(), CommandIn
 Cohesion: 0.18
 Nodes (6): DrawerContent(), DrawerDescription(), DrawerFooter(), DrawerHeader(), DrawerOverlay(), DrawerTitle()
 
-### Community 36 - "Community 36"
-Cohesion: 0.18
-Nodes (7): Sheet(), SheetContent(), SheetDescription(), SheetFooter(), SheetHeader(), SheetOverlay(), SheetTitle()
-
-### Community 37 - "Community 37"
-Cohesion: 0.27
-Nodes (6): FloatingActionButton(), GlobalSearch(), PWAInstallPrompt(), useIsMobile(), SidebarInset(), SidebarProvider()
-
 ### Community 38 - "Community 38"
 Cohesion: 0.18
 Nodes (11): 6️⃣ DOCUMENTAÇÃO, `CHECKLIST.md` ✨ NOVO (Criado nesta sessão), code:markdown (# v0 ERP para Artesanato – Developer Guidelines), code:block14 (1. Pré-requisitos), code:block15 (✓ Código TypeScript compilável), code:block16 (10 seções de testes:), code:block17 (Erros comuns:), `.github/copilot-instructions.md` ✨ NOVO (+3 more)
@@ -272,10 +246,6 @@ Nodes (11): 6️⃣ DOCUMENTAÇÃO, `CHECKLIST.md` ✨ NOVO (Criado nesta sessã
 ### Community 39 - "Community 39"
 Cohesion: 0.18
 Nodes (10): Architecture – Server/Client Separation, Build & Test, Code Style & Conventions, code:block1 ([module]/), code:bash (pnpm install         # Use pnpm (not npm/yarn)), Common Gotchas, Database & Types, Key Files to Understand the Pattern (+2 more)
-
-### Community 40 - "Community 40"
-Cohesion: 0.29
-Nodes (7): ProductionCheckerProps, VerificacaoProducao, verificarMateriaisProducao(), Alert(), AlertDescription(), AlertTitle(), alertVariants
 
 ### Community 41 - "Community 41"
 Cohesion: 0.22
@@ -290,24 +260,20 @@ Cohesion: 0.20
 Nodes (10): devDependencies, @playwright/test, postcss, tailwindcss, @tailwindcss/postcss, tw-animate-css, @types/node, @types/react (+2 more)
 
 ### Community 44 - "Community 44"
-Cohesion: 0.20
-Nodes (9): name, private, scripts, build, dev, lint, start, typecheck (+1 more)
+Cohesion: 0.17
+Nodes (11): name, overrides, postcss, private, scripts, build, dev, lint (+3 more)
 
 ### Community 45 - "Community 45"
 Cohesion: 0.28
 Nodes (5): metadata, poppins, viewport, ServiceWorkerRegistration(), ThemeProvider()
-
-### Community 46 - "Community 46"
-Cohesion: 0.33
-Nodes (8): formatShortDate(), RelativeTime(), FinanceiroContent(), formatCurrency(), formatDateBR(), getTodayDateString(), parseDateString(), toDateInputValue()
 
 ### Community 47 - "Community 47"
 Cohesion: 0.28
 Nodes (8): InputGroup(), InputGroupAddon(), inputGroupAddonVariants, InputGroupButton(), inputGroupButtonVariants, InputGroupInput(), InputGroupText(), InputGroupTextarea()
 
 ### Community 48 - "Community 48"
-Cohesion: 0.36
-Nodes (4): login(), loginError(), logout(), createClient()
+Cohesion: 0.19
+Nodes (12): getDashboardMetrics(), DashboardLayout(), DashboardPage(), DashboardPageProps, getAuthenticatedUser(), getUserDisplayName(), normalizeDisplayName(), titleCaseName() (+4 more)
 
 ### Community 49 - "Community 49"
 Cohesion: 0.22
@@ -327,11 +293,7 @@ Nodes (7): Empty(), EmptyContent(), EmptyDescription(), EmptyHeader(), EmptyMedi
 
 ### Community 53 - "Community 53"
 Cohesion: 0.46
-Nodes (6): clearSupabaseCookies(), isInvalidRefreshTokenError(), redirectToLogin(), updateSession(), config, middleware()
-
-### Community 54 - "Community 54"
-Cohesion: 0.43
-Nodes (5): ToggleGroup(), ToggleGroupContext, ToggleGroupItem(), Toggle(), toggleVariants
+Nodes (6): clearSupabaseCookies(), isInvalidRefreshTokenError(), redirectToLogin(), updateSession(), config, proxy()
 
 ### Community 55 - "Community 55"
 Cohesion: 0.29
@@ -365,24 +327,28 @@ Nodes (5): 4️⃣ COMPONENTES CLIENT, `app/dashboard/estoque/estoque-content.ts
 Cohesion: 0.50
 Nodes (3): Indice de documentacao, Leitura recomendada, Observacoes
 
+### Community 69 - "Community 69"
+Cohesion: 0.33
+Nodes (5): code:bash (graphify query "<question>"), code:bash (graphify update .), graphify, Rules, Token-saving workflow
+
 ## Knowledge Gaps
-- **403 isolated node(s):** `$schema`, `style`, `rsc`, `tsx`, `config` (+398 more)
+- **412 isolated node(s):** `$schema`, `style`, `rsc`, `tsx`, `config` (+407 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **8 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **4 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `cn()` connect `Community 1` to `Community 0`, `Community 7`, `Community 13`, `Community 18`, `Community 19`, `Community 22`, `Community 23`, `Community 24`, `Community 25`, `Community 28`, `Community 30`, `Community 31`, `Community 33`, `Community 34`, `Community 35`, `Community 36`, `Community 37`, `Community 40`, `Community 41`, `Community 46`, `Community 47`, `Community 51`, `Community 52`, `Community 54`, `Community 57`, `Community 58`, `Community 59`, `Community 60`, `Community 61`, `Community 64`, `Community 66`?**
-  _High betweenness centrality (0.190) - this node is a cross-community bridge._
-- **Why does `createAuthenticatedClient()` connect `Community 20` to `Community 32`, `Community 40`, `Community 10`, `Community 12`, `Community 14`, `Community 48`, `Community 26`, `Community 29`?**
+- **Why does `cn()` connect `Community 1` to `Community 0`, `Community 7`, `Community 13`, `Community 18`, `Community 19`, `Community 22`, `Community 23`, `Community 25`, `Community 28`, `Community 30`, `Community 31`, `Community 33`, `Community 34`, `Community 35`, `Community 41`, `Community 47`, `Community 51`, `Community 52`, `Community 58`, `Community 59`, `Community 60`, `Community 66`?**
+  _High betweenness centrality (0.184) - this node is a cross-community bridge._
+- **Why does `createAuthenticatedClient()` connect `Community 12` to `Community 32`, `Community 0`, `Community 10`, `Community 14`, `Community 48`, `Community 26`, `Community 29`?**
   _High betweenness centrality (0.015) - this node is a cross-community bridge._
-- **Why does `Button()` connect `Community 0` to `Community 1`, `Community 34`, `Community 37`, `Community 13`, `Community 47`, `Community 19`, `Community 25`?**
-  _High betweenness centrality (0.009) - this node is a cross-community bridge._
+- **Why does `Button()` connect `Community 0` to `Community 1`, `Community 34`, `Community 13`, `Community 47`, `Community 19`, `Community 25`?**
+  _High betweenness centrality (0.008) - this node is a cross-community bridge._
 - **What connects `$schema`, `style`, `rsc` to the rest of the system?**
-  _403 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _412 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**
-  _Cohesion score 0.07353535353535354 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.06274131274131274 - nodes in this community are weakly interconnected._
 - **Should `Community 1` be split into smaller, more focused modules?**
   _Cohesion score 0.055218855218855216 - nodes in this community are weakly interconnected._
 - **Should `Community 2` be split into smaller, more focused modules?**
