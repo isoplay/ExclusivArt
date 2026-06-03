@@ -1,5 +1,7 @@
 import { redirect } from 'next/navigation'
+import { cookies } from 'next/headers'
 import type { User } from '@supabase/supabase-js'
+import { isInvalidRefreshTokenError, isSupabaseAuthCookie } from '@/lib/supabase/auth-errors'
 import { createClient } from '@/lib/supabase/server'
 
 function normalizeDisplayName(value: unknown) {
@@ -17,31 +19,55 @@ function titleCaseName(value: string) {
     .join(' ')
 }
 
-export async function createAuthenticatedClient() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser()
+async function clearSupabaseServerCookies() {
+  const cookieStore = await cookies()
+  const authCookies = cookieStore.getAll().filter((cookie) => isSupabaseAuthCookie(cookie.name))
 
-  if (error || !user) {
-    redirect('/login')
+  for (const cookie of authCookies) {
+    try {
+      cookieStore.delete(cookie.name)
+    } catch {
+      return
+    }
+  }
+}
+
+async function redirectToLoginAfterAuthError(error?: unknown) {
+  if (isInvalidRefreshTokenError(error)) {
+    await clearSupabaseServerCookies()
+    redirect('/login?error=Sessao%20expirada.%20Entre%20novamente')
   }
 
+  redirect('/login')
+}
+
+async function getAuthenticatedSession() {
+  const supabase = await createClient()
+  let user: User | null = null
+  let authError: unknown = null
+
+  try {
+    const result = await supabase.auth.getUser()
+    user = result.data.user
+    authError = result.error
+  } catch (error) {
+    authError = error
+  }
+
+  if (authError || !user) {
+    await redirectToLoginAfterAuthError(authError)
+  }
+
+  return { supabase, user }
+}
+
+export async function createAuthenticatedClient() {
+  const { supabase } = await getAuthenticatedSession()
   return supabase
 }
 
 export async function getAuthenticatedUser() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser()
-
-  if (error || !user) {
-    redirect('/login')
-  }
-
+  const { user } = await getAuthenticatedSession()
   return user
 }
 

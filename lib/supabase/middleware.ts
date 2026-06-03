@@ -1,27 +1,11 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
-
-function isInvalidRefreshTokenError(error: unknown) {
-  if (!error || typeof error !== 'object') {
-    return false
-  }
-
-  const authError = error as { code?: string; message?: string }
-  const code = authError.code?.toLowerCase() ?? ''
-  const message = authError.message?.toLowerCase() ?? ''
-
-  return (
-    code === 'refresh_token_not_found' ||
-    code === 'invalid_grant' ||
-    message.includes('invalid refresh token') ||
-    message.includes('refresh token not found')
-  )
-}
+import { isInvalidRefreshTokenError, isSupabaseAuthCookie } from '@/lib/supabase/auth-errors'
 
 function clearSupabaseCookies(request: NextRequest, response: NextResponse) {
   request.cookies
     .getAll()
-    .filter((cookie) => cookie.name.startsWith('sb-'))
+    .filter((cookie) => isSupabaseAuthCookie(cookie.name))
     .forEach((cookie) => {
       request.cookies.delete(cookie.name)
       response.cookies.delete(cookie.name)
@@ -94,12 +78,18 @@ export async function updateSession(request: NextRequest) {
 
   // IMPORTANT: If you remove getUser() and you use server-side rendering
   // with the Supabase client, your users may be randomly logged out.
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser()
+  let user = null
+  let authError: unknown = null
 
-  if (isInvalidRefreshTokenError(error)) {
+  try {
+    const result = await supabase.auth.getUser()
+    user = result.data.user
+    authError = result.error
+  } catch (error) {
+    authError = error
+  }
+
+  if (isInvalidRefreshTokenError(authError)) {
     clearSupabaseCookies(request, supabaseResponse)
 
     if (isDashboard) {
