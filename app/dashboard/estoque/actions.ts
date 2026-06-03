@@ -6,6 +6,7 @@ import { createAuthenticatedClient } from '@/lib/auth'
 import type { Material, TipoMovimentacao } from '@/lib/types/database'
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024
+type ImageUploadResult = { url: string | null; error?: string }
 
 async function getSafeImageExtension(file: File) {
   if (file.size > MAX_IMAGE_SIZE) {
@@ -40,6 +41,38 @@ async function getSafeImageExtension(file: File) {
   if (isWebp) return 'webp'
 
   throw new Error('Use apenas imagens JPG, PNG ou WEBP')
+}
+
+function getImageContentType(file: File, fileExt: string) {
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
+  if (allowedTypes.includes(file.type)) {
+    return file.type
+  }
+
+  const fallbackTypes: Record<string, string> = {
+    jpg: 'image/jpeg',
+    png: 'image/png',
+    webp: 'image/webp',
+  }
+
+  return fallbackTypes[fileExt] ?? 'image/jpeg'
+}
+
+async function validatePublicImageUrl(publicUrl: string) {
+  try {
+    const response = await fetch(publicUrl, {
+      method: 'HEAD',
+      cache: 'no-store',
+    })
+
+    if (response.ok) {
+      return null
+    }
+
+    return `Imagem enviada, mas a URL publica nao abriu (${response.status}). Verifique as permissoes do bucket.`
+  } catch {
+    return 'Imagem enviada, mas nao foi possivel validar a URL publica do Storage.'
+  }
 }
 
 function validateMaterialFields(nome: string, tipo: string, quantidade: number, custoUnitario: number) {
@@ -113,31 +146,51 @@ export async function getMaterial(id: string) {
   return data as Material
 }
 
-export async function uploadImagemMaterial(file: File): Promise<string | null> {
+export async function uploadImagemMaterial(file: File): Promise<ImageUploadResult> {
   const supabase = await createAuthenticatedClient()
 
   const fileExt = await getSafeImageExtension(file)
   const fileName = `${crypto.randomUUID()}-${Date.now()}.${fileExt}`
   const filePath = `materiais/${fileName}`
+  const contentType = getImageContentType(file, fileExt)
 
   try {
-    const { data, error } = await supabase.storage
+    const { error } = await supabase.storage
       .from('imagens-estoque')
-      .upload(filePath, file, { upsert: false })
+      .upload(filePath, file, {
+        upsert: false,
+        contentType,
+        cacheControl: '31536000',
+      })
 
     if (error) {
       console.error('Error uploading image:', error)
-      return null
+      return {
+        url: null,
+        error: `Falha ao enviar imagem para o Storage: ${error.message}`,
+      }
     }
 
     const { data: publicUrl } = supabase.storage
       .from('imagens-estoque')
       .getPublicUrl(filePath)
 
-    return publicUrl.publicUrl
+    if (!publicUrl.publicUrl) {
+      return { url: null, error: 'Storage nao retornou uma URL publica para a imagem.' }
+    }
+
+    const publicUrlError = await validatePublicImageUrl(publicUrl.publicUrl)
+    if (publicUrlError) {
+      return { url: null, error: publicUrlError }
+    }
+
+    return { url: publicUrl.publicUrl }
   } catch (error) {
     console.error('Error during image upload:', error)
-    return null
+    return {
+      url: null,
+      error: error instanceof Error ? error.message : 'Erro ao enviar imagem',
+    }
   }
 }
 
@@ -166,7 +219,11 @@ export async function createMaterial(formData: FormData) {
   let imagem_url = imagemUrlResult.url
   if (imagem && imagem.size > 0) {
     try {
-      imagem_url = (await uploadImagemMaterial(imagem)) || imagem_url
+      const uploadResult = await uploadImagemMaterial(imagem)
+      if (uploadResult.error) {
+        return { success: false, error: uploadResult.error }
+      }
+      imagem_url = uploadResult.url || imagem_url
     } catch (error) {
       return {
         success: false,
@@ -232,7 +289,11 @@ export async function updateMaterial(id: string, formData: FormData) {
   let imagem_url: string | null | undefined = imagemUrlResult.url
   if (imagem && imagem.size > 0) {
     try {
-      imagem_url = (await uploadImagemMaterial(imagem)) || imagem_url
+      const uploadResult = await uploadImagemMaterial(imagem)
+      if (uploadResult.error) {
+        return { success: false, error: uploadResult.error }
+      }
+      imagem_url = uploadResult.url || imagem_url
     } catch (error) {
       return {
         success: false,
