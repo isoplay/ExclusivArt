@@ -7,12 +7,16 @@ import { FloatingActionButton } from '@/components/floating-action-button'
 import { Button } from '@/components/ui/button'
 import { logout } from '@/app/login/actions'
 import { LogOut } from 'lucide-react'
+import { getAuthenticatedUser, getUserDisplayName } from '@/lib/auth'
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  const user = await getAuthenticatedUser()
+  const userName = getUserDisplayName(user)
+
   return (
     <SidebarProvider>
       <AppSidebar />
@@ -35,8 +39,7 @@ export default function DashboardLayout({
               <GlobalSearch />
               <div className="ml-auto hidden h-10 items-center gap-2 rounded-full bg-[#fbf8ff] px-4 text-sm text-[#706b82] lg:flex">
                 <span>Olá,</span>
-                <strong className="font-semibold text-[#15142a]">Exclusiv Art</strong>
-                <span aria-hidden="true">👋</span>
+                <strong className="font-semibold text-[#15142a]">{userName}</strong>
               </div>
               <form action={logout}>
                 <Button

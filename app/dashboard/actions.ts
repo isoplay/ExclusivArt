@@ -128,6 +128,8 @@ export async function getDashboardMetrics() {
       const minimo = m.quantidade_minima ?? 30
       return atual <= minimo
     }) || []
+  const materiaisSemEstoque =
+    todosMateriais?.filter((m: Material) => getEstoqueAtual(m) <= 0) || []
 
   const { data: despesasMes, error: despesasError } = despesasMesResult
 
@@ -205,6 +207,7 @@ export async function getDashboardMetrics() {
     totalPedidosMes: pedidosMes?.length || 0,
     receitaMes,
     pedidosPendentes: pedidosPendentes?.length || 0,
+    materiaisSemEstoque: materiaisSemEstoque.length,
     materiaisBaixoEstoque: materiaisLowStock.length,
     despesasTotalMes,
     lucroMes: receitaMes - despesasTotalMes,

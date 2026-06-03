@@ -5,6 +5,7 @@ import type { ComponentType, ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 import { format, formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
+import { toast } from 'sonner'
 import { formatDateBR, parseDateString } from '@/lib/utils'
 import {
   AlertTriangle,
@@ -70,6 +71,7 @@ type DashboardMetrics = {
   totalPedidosMes: number
   receitaMes: number
   pedidosPendentes: number
+  materiaisSemEstoque: number
   materiaisBaixoEstoque: number
   despesasTotalMes: number
   lucroMes: number
@@ -343,18 +345,68 @@ function StatusSummaryCard({ statusList }: { statusList: PedidoStatusResumo[] })
   )
 }
 
-export function DashboardContent({ metrics }: { metrics: DashboardMetrics }) {
+function buildResumoMensagem(metrics: DashboardMetrics) {
+  if (metrics.materiaisSemEstoque > 0) {
+    return `${metrics.materiaisSemEstoque} material(is) estao sem estoque. Reponha esses itens antes de confirmar novos pedidos que dependam deles.`
+  }
+
+  if (metrics.materiaisBaixoEstoque > 0) {
+    return `${metrics.materiaisBaixoEstoque} material(is) precisam de reposicao. Ajuste o estoque antes de confirmar novos pedidos grandes.`
+  }
+
+  if (metrics.proximosEntregas.length >= 3) {
+    return `Semana com alta demanda: ${metrics.proximosEntregas.length} entregas previstas nos proximos 7 dias. Priorize producao e conferencias.`
+  }
+
+  if (metrics.proximosEntregas.length > 0) {
+    return `${metrics.proximosEntregas.length} entrega(s) previstas nos proximos 7 dias. Acompanhe os prazos de producao.`
+  }
+
+  if (metrics.pedidosPendentes > 0) {
+    return `Voce tem ${metrics.pedidosPendentes} pedido(s) em andamento. Bom momento para revisar status e etapas de producao.`
+  }
+
+  if (metrics.lucroMes < 0) {
+    return `Atencao: as despesas estao maiores que a receita neste mes. Revise custos, compras e precos dos produtos.`
+  }
+
+  if (metrics.totalPedidosMes === 0) {
+    return 'Nenhum pedido registrado neste mes. Bom momento para revisar produtos, fotos e materiais do estoque.'
+  }
+
+  if (metrics.receitaMes > 0) {
+    return `Receita do mes em ${formatCurrency(metrics.receitaMes)}. O estoque esta saudavel e nao ha entregas urgentes nos proximos 7 dias.`
+  }
+
+  return 'Seu estoque esta saudavel e nao ha entregas urgentes nos proximos 7 dias. Bom momento para focar em novos produtos.'
+}
+
+export function DashboardContent({
+  metrics,
+  usuarioNome,
+  mostrarBoasVindas,
+}: {
+  metrics: DashboardMetrics
+  usuarioNome: string
+  mostrarBoasVindas: boolean
+}) {
   const currentMonth = new Date().toLocaleDateString('pt-BR', {
     month: 'long',
     year: 'numeric',
   })
+  const resumoMensagem = buildResumoMensagem(metrics)
 
-  const resumoMensagem =
-    metrics.materiaisBaixoEstoque > 0
-      ? `${metrics.materiaisBaixoEstoque} material(is) precisam de reposição. Ajuste o estoque antes de confirmar novos pedidos grandes.`
-      : metrics.proximosEntregas.length > 0
-        ? `${metrics.proximosEntregas.length} entrega(s) previstas nos próximos 7 dias. Acompanhe os prazos de produção.`
-        : 'Seu estoque está saudável e não há entregas urgentes nos próximos 7 dias. Bom momento para focar em novos produtos.'
+  useEffect(() => {
+    if (!mostrarBoasVindas) {
+      return
+    }
+
+    toast.success(`Ola, ${usuarioNome}! Que bom te ver de volta.`)
+
+    const url = new URL(window.location.href)
+    url.searchParams.delete('welcome')
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
+  }, [mostrarBoasVindas, usuarioNome])
 
   return (
     <div className="flex w-full flex-col gap-6">

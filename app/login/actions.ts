@@ -22,7 +22,7 @@ export async function login(formData: FormData) {
     loginError('Credenciais invalidas')
   }
 
-  redirect('/dashboard')
+  redirect('/dashboard?welcome=1')
 }
 
 export async function logout() {
