@@ -1,6 +1,7 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { isInvalidRefreshTokenError, isSupabaseAuthCookie } from '@/lib/supabase/auth-errors'
+import { logServerError, logServerInfo } from '@/lib/server-log'
 
 function clearSupabaseCookies(request: NextRequest, response: NextResponse) {
   request.cookies
@@ -38,6 +39,11 @@ export async function updateSession(request: NextRequest) {
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
   if (!supabaseUrl || !supabaseAnonKey) {
+    logServerError('middleware_supabase_env_missing', new Error('Supabase env missing'), {
+      route: request.nextUrl.pathname,
+      missingUrl: !supabaseUrl,
+      missingAnonKey: !supabaseAnonKey,
+    })
     if (isDashboard) {
       const url = request.nextUrl.clone()
       url.pathname = '/login'
@@ -87,9 +93,16 @@ export async function updateSession(request: NextRequest) {
     authError = result.error
   } catch (error) {
     authError = error
+    logServerError('middleware_get_user_exception', error, {
+      route: request.nextUrl.pathname,
+    })
   }
 
   if (isInvalidRefreshTokenError(authError)) {
+    logServerInfo('middleware_invalid_refresh_cleared', {
+      route: request.nextUrl.pathname,
+      dashboard: isDashboard,
+    })
     clearSupabaseCookies(request, supabaseResponse)
 
     if (isDashboard) {
@@ -100,6 +113,9 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (isDashboard && !user) {
+    logServerInfo('middleware_dashboard_without_session', {
+      route: request.nextUrl.pathname,
+    })
     return redirectToLogin(request, supabaseResponse)
   }
 

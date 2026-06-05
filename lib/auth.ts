@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import type { User } from '@supabase/supabase-js'
 import { isInvalidRefreshTokenError, isSupabaseAuthCookie } from '@/lib/supabase/auth-errors'
 import { createClient } from '@/lib/supabase/server'
+import { logServerError, logServerInfo } from '@/lib/server-log'
 
 function normalizeDisplayName(value: unknown) {
   if (typeof value !== 'string') return null
@@ -34,8 +35,13 @@ async function clearSupabaseServerCookies() {
 
 async function redirectToLoginAfterAuthError(error?: unknown) {
   if (isInvalidRefreshTokenError(error)) {
+    logServerInfo('auth_invalid_refresh_cleared', {})
     await clearSupabaseServerCookies()
     redirect('/login?error=Sessao%20expirada.%20Entre%20novamente')
+  }
+
+  if (error) {
+    logServerError('auth_get_user_failed', error)
   }
 
   redirect('/login')
@@ -52,6 +58,7 @@ async function getAuthenticatedSession() {
     authError = result.error
   } catch (error) {
     authError = error
+    logServerError('auth_get_user_exception', error)
   }
 
   if (authError || !user) {

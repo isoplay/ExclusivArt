@@ -122,7 +122,7 @@ export type MovimentacaoEstoque = {
   quantidade: number
   motivo: string | null
   pedido_id: string | null
-  data_pedido: string
+  created_at: string
   // Joins
   material?: Material
 }

@@ -3,30 +3,51 @@
 import { revalidatePath } from 'next/cache'
 import { parseDecimalInput } from '@/lib/number'
 import { createAuthenticatedClient } from '@/lib/auth'
+import { logServerError } from '@/lib/server-log'
 import type { Despesa, CategoriaDespesa, Pedido } from '@/lib/types/database'
+
+const EMPTY_FINANCEIRO_RESUMO = {
+  receita: 0,
+  totalDespesas: 0,
+  lucro: 0,
+  totalPedidos: 0,
+  pedidosPorStatus: {},
+  despesasPorCategoria: {},
+  pedidos: [],
+  despesas: [],
+}
+
+function getMonthRange(mes: number, ano: number) {
+  const startDate = `${ano}-${String(mes + 1).padStart(2, '0')}-01`
+  const lastDay = new Date(ano, mes + 1, 0).getDate()
+  const endDate = `${ano}-${String(mes + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+
+  return { startDate, endDate }
+}
 
 export async function getDespesas(mes?: number, ano?: number) {
   const supabase = await createAuthenticatedClient()
 
-  let query = supabase.from('despesas').select('*').order('data', { ascending: false })
+  try {
+    let query = supabase.from('despesas').select('*').order('data', { ascending: false })
 
-  if (mes !== undefined && ano !== undefined) {
-    // Construir strings de data diretamente (YYYY-MM-DD) para evitar problemas de fuso horário / parsing por ambiente (servidor vs cliente)
-    const startDate = `${ano}-${String(mes + 1).padStart(2, '0')}-01`
-    // Último dia do mês: usar data do próximo mês -1 dia de forma segura via Date, mas forçar o dia local
-    const lastDay = new Date(ano, mes + 1, 0).getDate()
-    const endDate = `${ano}-${String(mes + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
-    query = query.gte('data', startDate).lte('data', endDate)
-  }
+    if (mes !== undefined && ano !== undefined) {
+      const { startDate, endDate } = getMonthRange(mes, ano)
+      query = query.gte('data', startDate).lte('data', endDate)
+    }
 
-  const { data, error } = await query
+    const { data, error } = await query
 
-  if (error) {
-    console.error('Error fetching expenses:', error)
+    if (error) {
+      logServerError('financeiro_get_despesas_failed', error, { table: 'despesas' })
+      return []
+    }
+
+    return data as Despesa[]
+  } catch (error) {
+    logServerError('financeiro_get_despesas_exception', error, { table: 'despesas' })
     return []
   }
-
-  return data as Despesa[]
 }
 
 export async function createDespesa(formData: FormData) {
@@ -49,7 +70,7 @@ export async function createDespesa(formData: FormData) {
   })
 
   if (error) {
-    console.error('Error creating expense:', error)
+    logServerError('financeiro_create_despesa_failed', error, { table: 'despesas' })
     return { success: false, error: error.message }
   }
 
@@ -81,7 +102,7 @@ export async function updateDespesa(id: string, formData: FormData) {
     .eq('id', id)
 
   if (error) {
-    console.error('Error updating expense:', error)
+    logServerError('financeiro_update_despesa_failed', error, { table: 'despesas' })
     return { success: false, error: error.message }
   }
 
@@ -96,7 +117,7 @@ export async function deleteDespesa(id: string) {
   const { error } = await supabase.from('despesas').delete().eq('id', id)
 
   if (error) {
-    console.error('Error deleting expense:', error)
+    logServerError('financeiro_delete_despesa_failed', error, { table: 'despesas' })
     return { success: false, error: error.message }
   }
 
@@ -110,21 +131,41 @@ export async function getFinanceiroResumo(mes: number, ano: number) {
 
   const startDate = new Date(ano, mes, 1).toISOString()
   const endDate = new Date(ano, mes + 1, 0).toISOString()
-  const startDateOnly = `${ano}-${String(mes + 1).padStart(2, '0')}-01`
-  const lastDay = new Date(ano, mes + 1, 0).getDate()
-  const endDateOnly = `${ano}-${String(mes + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+  const { startDate: startDateOnly, endDate: endDateOnly } = getMonthRange(mes, ano)
 
-  const { data: pedidos } = await supabase
-    .from('pedidos')
-    .select('*')
-    .gte('data_pedido', startDate)
-    .lte('data_pedido', endDate)
+  const results = await Promise.all([
+    supabase
+      .from('pedidos')
+      .select('*')
+      .gte('data_pedido', startDate)
+      .lte('data_pedido', endDate),
+    supabase
+      .from('despesas')
+      .select('*')
+      .gte('data', startDateOnly)
+      .lte('data', endDateOnly),
+  ]).catch((error) => {
+    logServerError('financeiro_resumo_exception', error)
+    return null
+  })
 
-  const { data: despesas } = await supabase
-    .from('despesas')
-    .select('*')
-    .gte('data', startDateOnly)
-    .lte('data', endDateOnly)
+  if (!results) {
+    return EMPTY_FINANCEIRO_RESUMO
+  }
+
+  const [{ data: pedidos, error: pedidosError }, { data: despesas, error: despesasError }] = results
+
+  if (pedidosError) {
+    logServerError('financeiro_resumo_pedidos_failed', pedidosError, { table: 'pedidos' })
+  }
+
+  if (despesasError) {
+    logServerError('financeiro_resumo_despesas_failed', despesasError, { table: 'despesas' })
+  }
+
+  if (pedidosError && despesasError) {
+    return EMPTY_FINANCEIRO_RESUMO
+  }
 
   const receita = (pedidos || []).reduce((acc: number, p: Pedido) => {
     if (p.status !== 'cancelado') {

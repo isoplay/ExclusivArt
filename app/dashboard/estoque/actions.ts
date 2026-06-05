@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { parseDecimalInput } from '@/lib/number'
 import { createAuthenticatedClient } from '@/lib/auth'
+import { logServerError } from '@/lib/server-log'
 import type { Material, TipoMovimentacao } from '@/lib/types/database'
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024
@@ -115,35 +116,45 @@ function getSafeImageUrl(value: FormDataEntryValue | null) {
 
 export async function getMateriais() {
   const supabase = await createAuthenticatedClient()
-  
-  const { data, error } = await supabase
-    .from('materiais')
-    .select('*')
-    .order('nome')
 
-  if (error) {
-    console.error('Error fetching materials:', error)
+  try {
+    const { data, error } = await supabase
+      .from('materiais')
+      .select('*')
+      .order('nome')
+
+    if (error) {
+      logServerError('estoque_get_materiais_failed', error, { table: 'materiais' })
+      return []
+    }
+
+    return data as Material[]
+  } catch (error) {
+    logServerError('estoque_get_materiais_exception', error, { table: 'materiais' })
     return []
   }
-
-  return data as Material[]
 }
 
 export async function getMaterial(id: string) {
   const supabase = await createAuthenticatedClient()
-  
-  const { data, error } = await supabase
-    .from('materiais')
-    .select('*')
-    .eq('id', id)
-    .single()
 
-  if (error) {
-    console.error('Error fetching material:', error)
+  try {
+    const { data, error } = await supabase
+      .from('materiais')
+      .select('*')
+      .eq('id', id)
+      .single()
+
+    if (error) {
+      logServerError('estoque_get_material_failed', error, { table: 'materiais' })
+      return null
+    }
+
+    return data as Material
+  } catch (error) {
+    logServerError('estoque_get_material_exception', error, { table: 'materiais' })
     return null
   }
-
-  return data as Material
 }
 
 export async function uploadImagemMaterial(file: File): Promise<ImageUploadResult> {
@@ -161,10 +172,14 @@ export async function uploadImagemMaterial(file: File): Promise<ImageUploadResul
         upsert: false,
         contentType,
         cacheControl: '31536000',
-      })
+    })
 
     if (error) {
-      console.error('Error uploading image:', error)
+      logServerError('estoque_upload_imagem_failed', error, {
+        bucket: 'imagens-estoque',
+        fileSize: file.size,
+        contentType,
+      })
       return {
         url: null,
         error: `Falha ao enviar imagem para o Storage: ${error.message}`,
@@ -186,7 +201,10 @@ export async function uploadImagemMaterial(file: File): Promise<ImageUploadResul
 
     return { url: publicUrl.publicUrl }
   } catch (error) {
-    console.error('Error during image upload:', error)
+    logServerError('estoque_upload_imagem_exception', error, {
+      bucket: 'imagens-estoque',
+      fileSize: file.size,
+    })
     return {
       url: null,
       error: error instanceof Error ? error.message : 'Erro ao enviar imagem',
@@ -256,7 +274,10 @@ export async function createMaterial(formData: FormData) {
   const { error } = await supabase.from('materiais').insert(insertData)
 
   if (error) {
-    console.error('Error creating material:', error)
+    logServerError('estoque_create_material_failed', error, {
+      table: 'materiais',
+      hasImage: Boolean(imagem_url),
+    })
     return { success: false, error: error.message }
   }
 
@@ -328,7 +349,10 @@ export async function updateMaterial(id: string, formData: FormData) {
     .eq('id', id)
 
   if (error) {
-    console.error('Error updating material:', error)
+    logServerError('estoque_update_material_failed', error, {
+      table: 'materiais',
+      hasImage: Boolean(imagem_url),
+    })
     return { success: false, error: error.message }
   }
 
@@ -345,7 +369,7 @@ export async function deleteMaterial(id: string) {
     .eq('id', id)
 
   if (error) {
-    console.error('Error deleting material:', error)
+    logServerError('estoque_delete_material_failed', error, { table: 'materiais' })
     return { success: false, error: error.message }
   }
 
@@ -393,7 +417,10 @@ export async function registrarMovimentacao(
   })
 
   if (movError) {
-    console.error('Error registering movement:', movError)
+    logServerError('estoque_registrar_movimentacao_failed', movError, {
+      table: 'movimentacoes_estoque',
+      tipo,
+    })
     return { success: false, error: movError.message }
   }
 
@@ -404,7 +431,7 @@ export async function registrarMovimentacao(
     .eq('id', materialId)
 
   if (updateError) {
-    console.error('Error updating quantity:', updateError)
+    logServerError('estoque_update_quantidade_failed', updateError, { table: 'materiais' })
     return { success: false, error: updateError.message }
   }
 
@@ -416,17 +443,26 @@ export async function registrarMovimentacao(
 export async function getMovimentacoes(materialId: string) {
   const supabase = await createAuthenticatedClient()
 
-  const { data, error } = await supabase
-    .from('movimentacoes_estoque')
-    .select('*')
-    .eq('material_id', materialId)
-    .order('data_pedido', { ascending: false })
-    .limit(20)
+  try {
+    const { data, error } = await supabase
+      .from('movimentacoes_estoque')
+      .select('*')
+      .eq('material_id', materialId)
+      .order('created_at', { ascending: false })
+      .limit(20)
 
-  if (error) {
-    console.error('Error fetching movements:', error)
+    if (error) {
+      logServerError('estoque_get_movimentacoes_failed', error, {
+        table: 'movimentacoes_estoque',
+      })
+      return []
+    }
+
+    return data
+  } catch (error) {
+    logServerError('estoque_get_movimentacoes_exception', error, {
+      table: 'movimentacoes_estoque',
+    })
     return []
   }
-
-  return data
 }

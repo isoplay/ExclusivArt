@@ -7,6 +7,30 @@ import {
   type Material,
   type Pedido,
 } from '@/lib/types/database'
+import { logServerError } from '@/lib/server-log'
+
+const EMPTY_DASHBOARD_METRICS = {
+  totalPedidosMes: 0,
+  receitaMes: 0,
+  pedidosPendentes: 0,
+  materiaisSemEstoque: 0,
+  materiaisBaixoEstoque: 0,
+  despesasTotalMes: 0,
+  lucroMes: 0,
+  pedidosPorStatus: [],
+  financeiroUltimosDias: [
+    { dia: 'Seg', receita: 0, despesas: 0 },
+    { dia: 'Ter', receita: 0, despesas: 0 },
+    { dia: 'Qua', receita: 0, despesas: 0 },
+    { dia: 'Qui', receita: 0, despesas: 0 },
+    { dia: 'Sex', receita: 0, despesas: 0 },
+    { dia: 'Sab', receita: 0, despesas: 0 },
+    { dia: 'Dom', receita: 0, despesas: 0 },
+  ],
+  pedidosRecentes: [],
+  proximosEntregas: [],
+  materiaisLowStock: [],
+}
 
 function getEstoqueAtual(material: Material) {
   return toNumber(material.quantidade_atual ?? material.quantidade)
@@ -46,16 +70,7 @@ export async function getDashboardMetrics() {
   })
   const sevenDaysAgo = lastSevenDays[0].toISOString()
 
-  const [
-    pedidosMesResult,
-    pedidosPendentesResult,
-    todosMateriaisResult,
-    despesasMesResult,
-    pedidosRecentesResult,
-    proximosEntregasResult,
-    pedidosUltimosDiasResult,
-    despesasUltimosDiasResult,
-  ] = await Promise.all([
+  const results = await Promise.all([
     supabase
       .from('pedidos')
       .select('*')
@@ -102,24 +117,42 @@ export async function getDashboardMetrics() {
       .from('despesas')
       .select('*')
       .gte('data', sevenDaysAgo.split('T')[0]),
-  ])
+  ]).catch((error) => {
+    logServerError('dashboard_metrics_exception', error)
+    return null
+  })
+
+  if (!results) {
+    return EMPTY_DASHBOARD_METRICS
+  }
+
+  const [
+    pedidosMesResult,
+    pedidosPendentesResult,
+    todosMateriaisResult,
+    despesasMesResult,
+    pedidosRecentesResult,
+    proximosEntregasResult,
+    pedidosUltimosDiasResult,
+    despesasUltimosDiasResult,
+  ] = results
 
   const { data: pedidosMes, error: pedidosError } = pedidosMesResult
 
   if (pedidosError) {
-    console.error('Error fetching pedidos:', pedidosError)
+    logServerError('dashboard_pedidos_mes_failed', pedidosError, { table: 'pedidos' })
   }
 
   const { data: pedidosPendentes, error: pendentesError } = pedidosPendentesResult
 
   if (pendentesError) {
-    console.error('Error fetching pending orders:', pendentesError)
+    logServerError('dashboard_pedidos_pendentes_failed', pendentesError, { table: 'pedidos' })
   }
 
   const { data: todosMateriais, error: materiaisError } = todosMateriaisResult
 
   if (materiaisError) {
-    console.error('Error fetching materials:', materiaisError)
+    logServerError('dashboard_materiais_failed', materiaisError, { table: 'materiais' })
   }
 
   const materiaisLowStock =
@@ -134,7 +167,7 @@ export async function getDashboardMetrics() {
   const { data: despesasMes, error: despesasError } = despesasMesResult
 
   if (despesasError) {
-    console.error('Error fetching despesas:', despesasError)
+    logServerError('dashboard_despesas_mes_failed', despesasError, { table: 'despesas' })
   }
 
   const receitaMes = (pedidosMes || []).reduce((acc: number, p: Pedido) => {
@@ -163,19 +196,19 @@ export async function getDashboardMetrics() {
   const { data: despesasUltimosDias, error: despesasUltimosDiasError } = despesasUltimosDiasResult
 
   if (pedidosRecentesError) {
-    console.error('Error fetching recent orders:', pedidosRecentesError)
+    logServerError('dashboard_pedidos_recentes_failed', pedidosRecentesError, { table: 'pedidos' })
   }
 
   if (proximosEntregasError) {
-    console.error('Error fetching upcoming deliveries:', proximosEntregasError)
+    logServerError('dashboard_proximas_entregas_failed', proximosEntregasError, { table: 'pedidos' })
   }
 
   if (pedidosUltimosDiasError) {
-    console.error('Error fetching last week orders:', pedidosUltimosDiasError)
+    logServerError('dashboard_pedidos_ultimos_dias_failed', pedidosUltimosDiasError, { table: 'pedidos' })
   }
 
   if (despesasUltimosDiasError) {
-    console.error('Error fetching last week expenses:', despesasUltimosDiasError)
+    logServerError('dashboard_despesas_ultimos_dias_failed', despesasUltimosDiasError, { table: 'despesas' })
   }
 
   const labels = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab']

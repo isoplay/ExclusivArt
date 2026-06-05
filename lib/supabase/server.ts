@@ -1,5 +1,6 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { logServerError } from '@/lib/server-log'
 
 /**
  * Especially important if using Fluid compute: Don't put this client in a
@@ -13,6 +14,10 @@ export async function createClient() {
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
   if (!supabaseUrl || !supabaseAnonKey) {
+    logServerError('supabase_env_missing', new Error('Supabase env missing'), {
+      missingUrl: !supabaseUrl,
+      missingAnonKey: !supabaseAnonKey,
+    })
     throw new Error(
       'Supabase URL and Anon Key must be set in environment variables'
     )

@@ -93,6 +93,129 @@ function getPreviewImageUrl(value?: string | null) {
   }
 }
 
+const SERVER_ACTION_IMAGE_LIMIT = 850 * 1024
+const MAX_SOURCE_IMAGE_SIZE = 12 * 1024 * 1024
+const IMAGE_OUTPUT_TYPE = 'image/jpeg'
+const IMAGE_DIMENSION_STEPS = [1600, 1200, 1000, 800]
+const IMAGE_QUALITY_STEPS = [0.86, 0.76, 0.66, 0.56, 0.46]
+const SUPPORTED_DIRECT_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
+
+function formatFileSize(bytes: number) {
+  if (bytes < 1024 * 1024) return `${Math.ceil(bytes / 1024)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1).replace('.', ',')} MB`
+}
+
+function replaceImageExtension(fileName: string) {
+  const cleanName = fileName.trim() || 'material'
+  return cleanName.replace(/\.[^.]+$/, '') + '.jpg'
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number) {
+  return new Promise<Blob | null>((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), type, quality)
+  })
+}
+
+function loadImageElement(file: File) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const url = URL.createObjectURL(file)
+    const image = new window.Image()
+
+    image.onload = () => {
+      URL.revokeObjectURL(url)
+      resolve(image)
+    }
+    image.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error('Nao foi possivel ler a imagem'))
+    }
+    image.src = url
+  })
+}
+
+async function prepareImageForServerAction(file: File | null) {
+  if (!file || file.size === 0) return { file: null as File | null, compressed: false }
+
+  if (!file.type.startsWith('image/')) {
+    return {
+      file: null,
+      compressed: false,
+      error: 'Selecione uma imagem valida.',
+    }
+  }
+
+  if (file.size > MAX_SOURCE_IMAGE_SIZE) {
+    return {
+      file: null,
+      compressed: false,
+      error: `A imagem tem ${formatFileSize(file.size)}. Use uma foto menor ou cadastre por URL.`,
+    }
+  }
+
+  if (file.size <= SERVER_ACTION_IMAGE_LIMIT && SUPPORTED_DIRECT_IMAGE_TYPES.has(file.type)) {
+    return { file, compressed: false }
+  }
+
+  try {
+    const image = await loadImageElement(file)
+    const sourceWidth = image.naturalWidth || image.width
+    const sourceHeight = image.naturalHeight || image.height
+
+    if (!sourceWidth || !sourceHeight) {
+      return {
+        file: null,
+        compressed: false,
+        error: 'Nao foi possivel ler as dimensoes da imagem.',
+      }
+    }
+
+    const canvas = document.createElement('canvas')
+    const context = canvas.getContext('2d')
+    if (!context) {
+      return {
+        file: null,
+        compressed: false,
+        error: 'Este navegador nao conseguiu preparar a imagem.',
+      }
+    }
+
+    for (const maxDimension of IMAGE_DIMENSION_STEPS) {
+      const scale = Math.min(1, maxDimension / Math.max(sourceWidth, sourceHeight))
+      canvas.width = Math.max(1, Math.round(sourceWidth * scale))
+      canvas.height = Math.max(1, Math.round(sourceHeight * scale))
+
+      context.fillStyle = '#ffffff'
+      context.fillRect(0, 0, canvas.width, canvas.height)
+      context.drawImage(image, 0, 0, canvas.width, canvas.height)
+
+      for (const quality of IMAGE_QUALITY_STEPS) {
+        const blob = await canvasToBlob(canvas, IMAGE_OUTPUT_TYPE, quality)
+        if (blob && blob.size <= SERVER_ACTION_IMAGE_LIMIT) {
+          return {
+            file: new File([blob], replaceImageExtension(file.name), {
+              type: IMAGE_OUTPUT_TYPE,
+              lastModified: Date.now(),
+            }),
+            compressed: true,
+          }
+        }
+      }
+    }
+
+    return {
+      file: null,
+      compressed: false,
+      error: 'Nao foi possivel compactar a imagem. Use uma imagem menor ou cadastre por URL.',
+    }
+  } catch {
+    return {
+      file: null,
+      compressed: false,
+      error: 'Nao foi possivel preparar essa imagem. Use JPG, PNG, WEBP ou uma URL.',
+    }
+  }
+}
+
 const unidades = [
   { value: 'un', label: 'Unidade' },
   { value: 'g', label: 'Gramas' },
@@ -120,6 +243,7 @@ export function EstoqueContent({
   const [selectedMaterial, setSelectedMaterial] = useState<Material | null>(null)
   const [previewMaterial, setPreviewMaterial] = useState<Material | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [imageFile, setImageFile] = useState<File | null>(null)
   const [addImagemUrl, setAddImagemUrl] = useState('')
   const [editImagemUrl, setEditImagemUrl] = useState('')
   const [addUnidade, setAddUnidade] = useState('un')
@@ -129,7 +253,9 @@ export function EstoqueContent({
   const [addCor, setAddCor] = useState('#808080')
   const [editCor, setEditCor] = useState('#808080')
   const [movTipo, setMovTipo] = useState<TipoMovimentacao>('entrada')
+  const [isPreparingImage, setIsPreparingImage] = useState(false)
   const [isPending, startTransition] = useTransition()
+  const isSaving = isPending || isPreparingImage
 
   const tiposAtivos = useMemo(
     () => tiposComponentes.filter((tipo) => tipo.ativo),
@@ -145,6 +271,14 @@ export function EstoqueContent({
       setAddTipo(tiposAtivos[0].nome)
     }
   }, [addTipo, tiposAtivos])
+
+  useEffect(() => {
+    return () => {
+      if (imagePreview?.startsWith('blob:')) {
+        URL.revokeObjectURL(imagePreview)
+      }
+    }
+  }, [imagePreview])
 
   function materialSemTipoValido(material: Material) {
     const key = normalizeKey(material.tipo)
@@ -178,15 +312,40 @@ export function EstoqueContent({
     return matchesSearch && matchesTipo
   })
 
-  function handleCreateSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function getPreparedImage() {
+    setIsPreparingImage(true)
+    try {
+      return await prepareImageForServerAction(imageFile)
+    } finally {
+      setIsPreparingImage(false)
+    }
+  }
+
+  async function handleCreateSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    const form = e.currentTarget
 
     if (!addTipo) {
       toast.error('Cadastre e selecione um tipo de componente em Configurações')
       return
     }
 
-    const formData = new FormData(e.currentTarget)
+    const imageResult = await getPreparedImage()
+
+    if (imageResult.error) {
+      toast.error(imageResult.error)
+      return
+    }
+
+    if (imageResult.compressed) {
+      toast.info('Foto compactada para envio seguro.')
+    }
+
+    const formData = new FormData(form)
+    formData.delete('imagem')
+    if (imageResult.file) {
+      formData.set('imagem', imageResult.file)
+    }
     formData.set('tipo', addTipo)
     formData.set('unidade', addUnidade)
     formData.set('cor', addCor)
@@ -197,6 +356,7 @@ export function EstoqueContent({
         toast.success('Material cadastrado com sucesso!')
         setIsAddOpen(false)
         setImagePreview(null)
+        setImageFile(null)
         setAddImagemUrl('')
         router.refresh()
       } else {
@@ -205,8 +365,9 @@ export function EstoqueContent({
     })
   }
 
-  function handleUpdateSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function handleUpdateSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    const form = e.currentTarget
     if (!selectedMaterial) return
 
     if (!editTipo) {
@@ -214,7 +375,22 @@ export function EstoqueContent({
       return
     }
 
-    const formData = new FormData(e.currentTarget)
+    const imageResult = await getPreparedImage()
+
+    if (imageResult.error) {
+      toast.error(imageResult.error)
+      return
+    }
+
+    if (imageResult.compressed) {
+      toast.info('Foto compactada para envio seguro.')
+    }
+
+    const formData = new FormData(form)
+    formData.delete('imagem')
+    if (imageResult.file) {
+      formData.set('imagem', imageResult.file)
+    }
     formData.set('tipo', editTipo)
     formData.set('unidade', editUnidade)
     formData.set('cor', editCor)
@@ -226,6 +402,7 @@ export function EstoqueContent({
         setIsEditOpen(false)
         setSelectedMaterial(null)
         setImagePreview(null)
+        setImageFile(null)
         setEditImagemUrl('')
         router.refresh()
       } else {
@@ -280,12 +457,37 @@ export function EstoqueContent({
   }
 
   function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const input = e.currentTarget
+    const file = input.files?.[0] ?? null
 
-    const reader = new FileReader()
-    reader.onloadend = () => setImagePreview(reader.result as string)
-    reader.readAsDataURL(file)
+    if (!file) {
+      setImageFile(null)
+      setImagePreview(null)
+      return
+    }
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Selecione uma imagem valida.')
+      input.value = ''
+      setImageFile(null)
+      setImagePreview(null)
+      return
+    }
+
+    if (file.size > MAX_SOURCE_IMAGE_SIZE) {
+      toast.error(`A imagem tem ${formatFileSize(file.size)}. Use uma foto menor ou cadastre por URL.`)
+      input.value = ''
+      setImageFile(null)
+      setImagePreview(null)
+      return
+    }
+
+    setImageFile(file)
+    setImagePreview(URL.createObjectURL(file))
+
+    if (file.size > SERVER_ACTION_IMAGE_LIMIT || !SUPPORTED_DIRECT_IMAGE_TYPES.has(file.type)) {
+      toast.info('A foto sera otimizada ao salvar.')
+    }
   }
 
   function openEdit(material: Material) {
@@ -295,6 +497,7 @@ export function EstoqueContent({
     setEditCor(material.cor || '#808080')
     setEditImagemUrl(material.imagem_url || '')
     setImagePreview(null)
+    setImageFile(null)
     setIsEditOpen(true)
   }
 
@@ -313,6 +516,7 @@ export function EstoqueContent({
             setIsAddOpen(open)
             if (!open) {
               setImagePreview(null)
+              setImageFile(null)
               setAddImagemUrl('')
             }
           }}
@@ -370,7 +574,7 @@ export function EstoqueContent({
                 <Label htmlFor="imagem">Foto do material</Label>
                 <Input id="imagem" name="imagem" type="file" accept="image/*" onChange={handleImageChange} />
                 <p className="text-xs text-muted-foreground">
-                  Opcional. Use arquivo JPG, PNG ou WEBP.
+                  Opcional. Use JPG, PNG ou WEBP. Fotos grandes sao otimizadas antes do envio.
                 </p>
                 {imagePreview && (
                   <div className="relative h-36 w-full overflow-hidden rounded-md bg-muted">
@@ -484,8 +688,8 @@ export function EstoqueContent({
                     Cancelar
                   </Button>
                 </DialogClose>
-                <Button type="submit" disabled={isPending || tiposAtivos.length === 0}>
-                  {isPending ? 'Salvando...' : 'Salvar'}
+                <Button type="submit" disabled={isSaving || tiposAtivos.length === 0}>
+                  {isSaving ? 'Salvando...' : 'Salvar'}
                 </Button>
               </DialogFooter>
             </form>
@@ -700,6 +904,7 @@ export function EstoqueContent({
           if (!open) {
             setSelectedMaterial(null)
             setImagePreview(null)
+            setImageFile(null)
             setEditImagemUrl('')
           }
         }}
@@ -772,7 +977,7 @@ export function EstoqueContent({
                 <Label htmlFor="edit-imagem">Foto do material</Label>
                 <Input id="edit-imagem" name="imagem" type="file" accept="image/*" onChange={handleImageChange} />
                 <p className="text-xs text-muted-foreground">
-                  Opcional. Use arquivo JPG, PNG ou WEBP.
+                  Opcional. Use JPG, PNG ou WEBP. Fotos grandes sao otimizadas antes do envio.
                 </p>
                 {(imagePreview || getPreviewImageUrl(editImagemUrl)) && (
                   <div className="relative h-36 w-full overflow-hidden rounded-md border bg-muted">
@@ -843,8 +1048,8 @@ export function EstoqueContent({
                     Cancelar
                   </Button>
                 </DialogClose>
-                <Button type="submit" disabled={isPending}>
-                  {isPending ? 'Salvando...' : 'Salvar'}
+                <Button type="submit" disabled={isSaving}>
+                  {isSaving ? 'Salvando...' : 'Salvar'}
                 </Button>
               </DialogFooter>
             </form>

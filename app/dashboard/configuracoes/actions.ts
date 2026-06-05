@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createAuthenticatedClient } from '@/lib/auth'
+import { logServerError } from '@/lib/server-log'
 import type { TipoComponenteConfig } from '@/lib/types/database'
 
 function normalizeText(value: string | null | undefined) {
@@ -27,78 +28,89 @@ function revalidateConfiguracoesDependentes() {
 export async function getTiposComponentesConfig(): Promise<TipoComponenteConfig[]> {
   const supabase = await createAuthenticatedClient()
 
-  const { data: grupos, error } = await supabase
-    .from('grupos_componentes')
-    .select(
+  try {
+    const { data: grupos, error } = await supabase
+      .from('grupos_componentes')
+      .select(
+        `
+        id,
+        nome,
+        ativo,
+        ordem,
+        categoria:categorias_produtos (
+          nome,
+          ativo
+        )
       `
-      id,
-      nome,
-      ativo,
-      ordem,
-      categoria:categorias_produtos (
-        nome,
-        ativo
       )
-    `
-    )
-    .order('ordem')
+      .order('ordem')
 
-  if (error) {
-    console.error('Error fetching component types:', error)
-    return []
-  }
-
-  const { data: materiais, error: materiaisError } = await supabase
-    .from('materiais')
-    .select('id, tipo')
-
-  if (materiaisError) {
-    console.error('Error fetching material types:', materiaisError)
-  }
-
-  const materialCount = new Map<string, number>()
-  ;(materiais || []).forEach((material) => {
-    const key = normalizeKey(material.tipo)
-    if (!key) return
-    materialCount.set(key, (materialCount.get(key) || 0) + 1)
-  })
-
-  const grouped = new Map<string, TipoComponenteConfig>()
-
-  ;(grupos || []).forEach((grupo: any) => {
-    const nome = normalizeText(grupo.nome)
-    const key = normalizeKey(nome)
-    if (!key) return
-
-    const categoria = Array.isArray(grupo.categoria) ? grupo.categoria[0] : grupo.categoria
-    if (categoria?.ativo === false) return
-
-    const current =
-      grouped.get(key) ||
-      ({
-        nome,
-        ativo: false,
-        total_grupos: 0,
-        categorias: [] as string[],
-        materiais_vinculados: materialCount.get(key) || 0,
-        ordem: grupo.ordem ?? 999,
-      } satisfies TipoComponenteConfig)
-
-    current.ativo = current.ativo || grupo.ativo === true
-    current.total_grupos += 1
-    current.ordem = Math.min(current.ordem, grupo.ordem ?? 999)
-
-    if (categoria?.nome && !current.categorias.includes(categoria.nome)) {
-      current.categorias.push(categoria.nome)
+    if (error) {
+      logServerError('config_get_tipos_componentes_failed', error, {
+        table: 'grupos_componentes',
+      })
+      return []
     }
 
-    grouped.set(key, current)
-  })
+    const { data: materiais, error: materiaisError } = await supabase
+      .from('materiais')
+      .select('id, tipo')
 
-  return Array.from(grouped.values()).sort((a, b) => {
-    if (a.ordem !== b.ordem) return a.ordem - b.ordem
-    return a.nome.localeCompare(b.nome, 'pt-BR')
-  })
+    if (materiaisError) {
+      logServerError('config_get_material_types_failed', materiaisError, {
+        table: 'materiais',
+      })
+    }
+
+    const materialCount = new Map<string, number>()
+    ;(materiais || []).forEach((material) => {
+      const key = normalizeKey(material.tipo)
+      if (!key) return
+      materialCount.set(key, (materialCount.get(key) || 0) + 1)
+    })
+
+    const grouped = new Map<string, TipoComponenteConfig>()
+
+    ;(grupos || []).forEach((grupo: any) => {
+      const nome = normalizeText(grupo.nome)
+      const key = normalizeKey(nome)
+      if (!key) return
+
+      const categoria = Array.isArray(grupo.categoria) ? grupo.categoria[0] : grupo.categoria
+      if (categoria?.ativo === false) return
+
+      const current =
+        grouped.get(key) ||
+        ({
+          nome,
+          ativo: false,
+          total_grupos: 0,
+          categorias: [] as string[],
+          materiais_vinculados: materialCount.get(key) || 0,
+          ordem: grupo.ordem ?? 999,
+        } satisfies TipoComponenteConfig)
+
+      current.ativo = current.ativo || grupo.ativo === true
+      current.total_grupos += 1
+      current.ordem = Math.min(current.ordem, grupo.ordem ?? 999)
+
+      if (categoria?.nome && !current.categorias.includes(categoria.nome)) {
+        current.categorias.push(categoria.nome)
+      }
+
+      grouped.set(key, current)
+    })
+
+    return Array.from(grouped.values()).sort((a, b) => {
+      if (a.ordem !== b.ordem) return a.ordem - b.ordem
+      return a.nome.localeCompare(b.nome, 'pt-BR')
+    })
+  } catch (error) {
+    logServerError('config_get_tipos_componentes_exception', error, {
+      tables: ['grupos_componentes', 'materiais'],
+    })
+    return []
+  }
 }
 
 export async function criarTipoComponente(formData: FormData) {

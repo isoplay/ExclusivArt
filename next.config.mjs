@@ -4,6 +4,11 @@ const isDev = process.env.NODE_ENV === 'development'
 const nextConfig = {
   allowedDevOrigins: ['192.168.0.2', 'localhost'],
   poweredByHeader: false,
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '6mb',
+    },
+  },
   images: {
     unoptimized: true,
   },
