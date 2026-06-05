@@ -12,6 +12,14 @@ next.user-config.*
 .env
 .env.*
 
+# AI / Agents / Codex / Graphify
+.agents/
+.codex/
+graphify-out/
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+
 # Cursor / Copilot
 .cursor/
 .copilot/
@@ -46,20 +54,8 @@ build/
 .vscode/
 .idea/
 
+# VS Code workspace
+*.code-workspace
+
 # TypeScript
 *.tsbuildinfo
-
-# Graphify
-
-graphify-out/cache/
-graphify-out/graph.html
-graphify-out/manifest.json
-graphify-out/stat-index.json
-graphify-out/.graphify_labels.json
-graphify-out/.graphify_root
-
-# Keep useful Graphify context for Codex
-
-!graphify-out/
-!graphify-out/graph.json
-!graphify-out/GRAPH_REPORT.md
