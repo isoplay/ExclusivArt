@@ -7,7 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "tsc --noEmit",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "pnpm test:unit",
+    "test:unit": "playwright test tests/unit",
+    "test:e2e": "playwright test tests/e2e"
   },
   "overrides": {
     "postcss": "^8.5.15"

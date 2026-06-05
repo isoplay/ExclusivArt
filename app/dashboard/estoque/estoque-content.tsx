@@ -55,6 +55,7 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { MaterialAvatar } from '@/components/material-avatar'
 import { parseDecimalInput } from '@/lib/number'
+import { saveOfflineSnapshot } from '@/lib/offline-cache'
 import type { Material, TipoComponenteConfig, TipoMovimentacao } from '@/lib/types/database'
 import { createMaterial, deleteMaterial, registrarMovimentacao, updateMaterial } from './actions'
 
@@ -271,6 +272,20 @@ export function EstoqueContent({
       setAddTipo(tiposAtivos[0].nome)
     }
   }, [addTipo, tiposAtivos])
+
+  useEffect(() => {
+    if (materiais.length === 0) return
+
+    saveOfflineSnapshot({
+      materiais: materiais.map((material) => ({
+        id: material.id,
+        nome: material.nome,
+        subtitulo: material.tipo ?? 'Sem tipo',
+        detalhe: `Custo ${formatCurrency(material.custo_unitario ?? 0)}`,
+        estoque: `${getEstoqueAtual(material)} ${material.unidade}`,
+      })),
+    })
+  }, [materiais])
 
   useEffect(() => {
     return () => {

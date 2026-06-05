@@ -2,21 +2,22 @@ import { WifiOff, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Image from 'next/image'
 import Link from 'next/link'
+import { OfflineSnapshotViewer } from '@/components/offline-snapshot-viewer'
 
 export default function OfflinePage() {
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="text-center space-y-6 max-w-sm">
-        <div className="mx-auto w-24 h-24 relative">
+    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+      <div className="flex w-full max-w-4xl flex-col items-center text-center">
+        <div className="relative mx-auto h-24 w-24">
           <Image
-            src="/logo.jpg"
+            src="/exclusiv-art-logo.png"
             alt="ExclusivArt"
             fill
-            className="rounded-full object-cover opacity-50"
+            className="object-contain opacity-70"
           />
         </div>
         
-        <div className="space-y-2">
+        <div className="mt-6 space-y-2">
           <div className="flex items-center justify-center gap-2 text-muted-foreground">
             <WifiOff className="h-6 w-6" />
           </div>
@@ -28,7 +29,7 @@ export default function OfflinePage() {
           </p>
         </div>
 
-        <div className="space-y-3">
+        <div className="mt-6 w-full max-w-sm space-y-3">
           <Button asChild className="w-full">
             <Link href="/dashboard">
               <RefreshCw className="mr-2 h-4 w-4" />
@@ -39,6 +40,8 @@ export default function OfflinePage() {
             Algumas funcoes podem estar disponiveis offline.
           </p>
         </div>
+
+        <OfflineSnapshotViewer />
       </div>
     </div>
   )

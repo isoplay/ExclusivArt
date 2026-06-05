@@ -2,6 +2,7 @@ import Image from 'next/image'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar'
 import { PWAInstallPrompt } from '@/components/pwa-install-prompt'
+import { OfflineStatusIndicator } from '@/components/offline-status-indicator'
 import { GlobalSearch } from '@/components/global-search'
 import { FloatingActionButton } from '@/components/floating-action-button'
 import { Button } from '@/components/ui/button'
@@ -61,6 +62,7 @@ export default async function DashboardLayout({
       </SidebarInset>
       <FloatingActionButton />
       <PWAInstallPrompt />
+      <OfflineStatusIndicator />
     </SidebarProvider>
   )
 }

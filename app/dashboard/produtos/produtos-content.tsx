@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Copy, Eye, MoreHorizontal, Package, Pencil, Plus, Search, Trash2 } from 'lucide-react'
@@ -35,6 +35,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import type { ProdutoComMateriais } from '@/lib/types/database'
+import { saveOfflineSnapshot } from '@/lib/offline-cache'
 import {
   createProduto,
   deleteProduto,
@@ -77,6 +78,20 @@ export function ProdutosContent({ produtos }: { produtos: ProdutoComMateriais[] 
   const filteredProdutos = produtos.filter((produto) =>
     produto.nome.toLowerCase().includes(searchTerm.toLowerCase())
   )
+
+  useEffect(() => {
+    if (produtos.length === 0) return
+
+    saveOfflineSnapshot({
+      produtos: produtos.map((produto) => ({
+        id: produto.id,
+        nome: produto.nome,
+        subtitulo: produto.tipo,
+        detalhe: `Preco ${formatCurrency(produto.preco_venda ?? 0)}`,
+        estoque: `Mao de obra ${formatCurrency(produto.valor_maodeobra ?? 0)}`,
+      })),
+    })
+  }, [produtos])
 
   function handleCreateSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()

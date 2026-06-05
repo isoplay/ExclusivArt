@@ -1,4 +1,4 @@
-const CACHE_NAME = 'exclusiv-art-v6'
+const CACHE_NAME = 'exclusiv-art-v7'
 const PRECACHE_ASSETS = [
   '/offline',
   '/manifest.json',
@@ -27,7 +27,11 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     Promise.all([
       caches.keys().then((cacheNames) => {
-        return Promise.all(cacheNames.map((name) => caches.delete(name)))
+        return Promise.all(
+          cacheNames
+            .filter((name) => name !== CACHE_NAME)
+            .map((name) => caches.delete(name))
+        )
       }),
       self.registration.navigationPreload
         ? self.registration.navigationPreload.enable()

@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import {
   Boxes,
   CalendarDays,
+  ClipboardList,
   LayoutDashboard,
   Package,
   Settings,
@@ -47,6 +48,11 @@ const menuItems = [
     title: 'Pedidos',
     url: '/dashboard/pedidos',
     icon: ShoppingCart,
+  },
+  {
+    title: 'Operacao',
+    url: '/dashboard/operacao',
+    icon: ClipboardList,
   },
   {
     title: 'Calendário',
