@@ -15,6 +15,7 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock,
+  History,
   ShoppingCart,
   Sparkles,
   TrendingUp,
@@ -70,6 +71,9 @@ type FinanceiroDia = {
 type DashboardMetrics = {
   totalPedidosMes: number
   receitaMes: number
+  receitaPedidosSistema: number
+  receitaHistorica: number
+  totalVendidoDesdeInicio: number
   pedidosPendentes: number
   materiaisSemEstoque: number
   materiaisBaixoEstoque: number
@@ -345,6 +349,42 @@ function StatusSummaryCard({ statusList }: { statusList: PedidoStatusResumo[] })
   )
 }
 
+function LifetimeSalesCard({
+  title,
+  value,
+  description,
+  icon: Icon,
+  emphasis = false,
+}: {
+  title: string
+  value: number
+  description: string
+  icon: ComponentType<{ className?: string }>
+  emphasis?: boolean
+}) {
+  return (
+    <Card
+      className={cn(
+        'rounded-[22px] border-[#eadff4] bg-white shadow-[0_16px_45px_rgba(83,48,122,0.06)]',
+        emphasis && 'bg-gradient-to-br from-[#f5f0ff] to-white'
+      )}
+    >
+      <CardContent className="flex items-center justify-between gap-4 p-6">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-[#706b82]">{title}</p>
+          <p className="mt-3 text-2xl font-semibold tracking-tight text-[#15142a]">
+            {formatCurrency(value)}
+          </p>
+          <p className="mt-1 text-xs leading-5 text-[#706b82]">{description}</p>
+        </div>
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#e3daf4] text-[#6f56a4]">
+          <Icon className="h-5 w-5" />
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 function buildResumoMensagem(metrics: DashboardMetrics) {
   if (metrics.materiaisSemEstoque > 0) {
     return `${metrics.materiaisSemEstoque} material(is) estao sem estoque. Reponha esses itens antes de confirmar novos pedidos que dependam deles.`
@@ -496,6 +536,28 @@ export function DashboardContent({
           description="margem estimada do mês"
           icon={Wallet}
           tone="blue"
+        />
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-3">
+        <LifetimeSalesCard
+          title="Receita atual"
+          value={metrics.receitaPedidosSistema}
+          description="Somente pedidos prontos ou entregues, sem vendas antigas."
+          icon={ShoppingCart}
+        />
+        <LifetimeSalesCard
+          title="Histórico antigo"
+          value={metrics.receitaHistorica}
+          description="Vendas cadastradas a partir das anotações em papel."
+          icon={History}
+        />
+        <LifetimeSalesCard
+          title="Total vendido desde o início"
+          value={metrics.totalVendidoDesdeInicio}
+          description="Pedidos atuais somados ao histórico antigo."
+          icon={TrendingUp}
+          emphasis
         />
       </section>
 

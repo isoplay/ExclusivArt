@@ -1,3 +1,2 @@
-// Re-export da implementação canônica em hooks/use-mobile.ts
-// (evita duplicação e divergência de código sensível a dispositivo)
+// Mantem um unico hook de breakpoint; imports antigos ainda passam por components/ui.
 export { useIsMobile } from '@/hooks/use-mobile'

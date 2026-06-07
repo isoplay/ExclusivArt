@@ -22,7 +22,7 @@ export function PWAInstallPrompt() {
       (navigator as Navigator & { standalone?: boolean }).standalone === true
     setIsStandalone(standalone)
 
-    // Detecção de iOS mais robusta (iPad moderno reporta como Mac + touch points)
+    // iPadOS moderno se apresenta como Mac, mas ainda expõe touch points.
     const ua = navigator.userAgent
     const iosUA = /iPad|iPhone|iPod/.test(ua)
     const isIPadOS = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1
@@ -52,7 +52,7 @@ export function PWAInstallPrompt() {
 
     window.addEventListener('beforeinstallprompt', handler)
 
-    // For iOS, show instructions after delay
+    // iOS nao dispara beforeinstallprompt; mostramos a instrucao manual depois de um tempo.
     if (ios && !standalone) {
       iosTimeout = setTimeout(() => {
         setShowPrompt(true)
@@ -80,7 +80,7 @@ export function PWAInstallPrompt() {
 
   function handleDismiss() {
     setShowPrompt(false)
-    // Don't show again for 7 days
+    // Evita insistir no aviso toda vez que a dona abrir o app.
     localStorage.setItem('pwa-prompt-dismissed', Date.now().toString())
   }
 

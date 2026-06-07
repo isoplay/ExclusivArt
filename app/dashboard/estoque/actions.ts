@@ -64,7 +64,7 @@ async function validatePublicImageUrl(publicUrl: string) {
     const response = await fetch(publicUrl, {
       method: 'HEAD',
       cache: 'no-store',
-    })
+      })
 
     if (response.ok) {
       return null
@@ -250,7 +250,7 @@ export async function createMaterial(formData: FormData) {
     }
   }
 
-  // No formulário, o usuário digita o custo unitário em R$.
+  // O cadastro trabalha com custo unitario; preco_compra guarda o custo total inicial.
   const preco_compra =
     custo_unitario_input > 0 ? custo_unitario_input * quantidade : preco_compra_input
 
@@ -265,8 +265,8 @@ export async function createMaterial(formData: FormData) {
     preco_compra,
   }
 
-  // Não enviar `imagem_url` quando não houver upload. Isso evita erros
-  // quando o PostgREST ainda está com schema cache desatualizado.
+  // Evita tocar em imagem_url sem imagem nova. Em deploy recente, o PostgREST
+  // pode demorar alguns minutos para enxergar a coluna criada por migration.
   if (imagem_url) {
     insertData.imagem_url = imagem_url
   }
@@ -385,7 +385,6 @@ export async function registrarMovimentacao(
 ) {
   const supabase = await createAuthenticatedClient()
 
-  // Get current material
   const { data: material, error: fetchError } = await supabase
     .from('materiais')
     .select('quantidade, quantidade_atual')
@@ -408,7 +407,6 @@ export async function registrarMovimentacao(
     }
   }
 
-  // Insert movement record
   const { error: movError } = await supabase.from('movimentacoes_estoque').insert({
     material_id: materialId,
     tipo,
@@ -424,7 +422,6 @@ export async function registrarMovimentacao(
     return { success: false, error: movError.message }
   }
 
-  // Update material quantity
   const { error: updateError } = await supabase
     .from('materiais')
     .update({ quantidade: novaQuantidade, quantidade_atual: novaQuantidade })

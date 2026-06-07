@@ -70,6 +70,7 @@ export function calculatePricing(input: PricingInput): PricingResult {
   const marketplaceFeePercent = normalizePercent(toNumber(input.marketplaceFeePercent))
   const marginPercent = normalizePercent(toNumber(input.marginPercent))
   const custo_base = materialCost + laborCost + packagingCost + freightCost
+  // Taxa de marketplace come parte do preco final, entao entra no divisor junto da margem.
   const divisor = 1 - marginPercent / 100 - marketplaceFeePercent / 100
   const preco_sugerido = divisor <= 0 ? custo_base : custo_base / divisor
   const preco_atual = toNumber(input.currentPrice) > 0 ? toNumber(input.currentPrice) : preco_sugerido
@@ -107,6 +108,8 @@ export function buildStockAlerts(
       const estoque_atual = getEstoqueAtual(material)
       const estoque_minimo = toNumber(material.quantidade_minima ?? 30)
       const demanda_aberta = demandaPorMaterial.get(material.id) ?? 0
+      // Compra sugerida cobre primeiro pedido em aberto; se nao faltar para pedido,
+      // cobre reposicao ate o minimo definido no cadastro.
       const faltaParaPedido = Math.max(0, demanda_aberta - estoque_atual)
       const faltaParaMinimo = Math.max(0, estoque_minimo - estoque_atual)
       const falta = Math.max(faltaParaPedido, faltaParaMinimo)
@@ -142,6 +145,7 @@ export function getDaysUntil(dateValue?: string | null, now = new Date()) {
   if (!dateValue) return null
   const dateOnly = dateValue.split('T')[0]
   const [year, month, day] = dateOnly.split('-').map(Number)
+  // Prazo salvo como YYYY-MM-DD deve ser tratado no horario local, nao como UTC.
   const date =
     year && month && day
       ? new Date(year, month - 1, day)

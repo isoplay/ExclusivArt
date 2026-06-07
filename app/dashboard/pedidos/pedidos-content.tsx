@@ -34,9 +34,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Plus, MoreHorizontal, Search, Eye, Trash2, Clock } from 'lucide-react'
+import { Plus, Copy, MoreHorizontal, Search, Eye, Send, Trash2, Clock } from 'lucide-react'
 import type { Material, PedidoComItens, StatusPedido } from '@/lib/types/database'
-import { deletePedido, updatePedidoStatus } from './actions'
+import { deletePedido, gerarLinkAcompanhamentoPedido, updatePedidoStatus } from './actions'
 import { PedidoForm } from './pedido-form'
 import { toast } from 'sonner'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -51,6 +51,15 @@ function formatCurrency(value: number) {
 
 function formatDate(date: string | null) {
   return formatDateBR(date)
+}
+
+function openExternalUrl(url: string) {
+  try {
+    const opened = window.open(url, '_blank', 'noopener,noreferrer')
+    return Boolean(opened)
+  } catch {
+    return false
+  }
 }
 
 const STATUS_COLORS: { [key: string]: string } = {
@@ -93,6 +102,8 @@ export function PedidosContent({
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [isViewOpen, setIsViewOpen] = useState(false)
   const [selectedPedido, setSelectedPedido] = useState<PedidoComItens | null>(null)
+  const [trackingLink, setTrackingLink] = useState<string | null>(null)
+  const [trackingWhatsAppUrl, setTrackingWhatsAppUrl] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -139,7 +150,47 @@ export function PedidosContent({
 
   function openView(pedido: PedidoComItens) {
     setSelectedPedido(pedido)
+    setTrackingLink(null)
+    setTrackingWhatsAppUrl(null)
     setIsViewOpen(true)
+  }
+
+  async function copyTrackingLink(link: string) {
+    try {
+      await navigator.clipboard.writeText(link)
+      toast.success('Link copiado.')
+    } catch {
+      toast.info('Link gerado. Copie manualmente se necessario.')
+    }
+  }
+
+  async function handleSendTrackingLink() {
+    if (!selectedPedido) return
+
+    startTransition(async () => {
+      const result = await gerarLinkAcompanhamentoPedido(selectedPedido.id)
+
+      if (!result.success) {
+        toast.error(result.error || 'Erro ao gerar link de acompanhamento')
+        return
+      }
+
+      setTrackingLink(result.trackingUrl)
+      setTrackingWhatsAppUrl(result.whatsappUrl)
+      await copyTrackingLink(result.trackingUrl)
+
+      const openedWhatsApp = openExternalUrl(result.whatsappUrl)
+
+      if (openedWhatsApp) {
+        toast.success(
+          result.hasClientPhone
+            ? 'Link gerado. Abrindo WhatsApp da cliente.'
+            : 'Link gerado. WhatsApp aberto sem telefone vinculado.'
+        )
+      } else {
+        toast.info('Link gerado e copiado. Use o botao Abrir WhatsApp se o navegador bloquear.')
+      }
+    })
   }
 
   return (
@@ -335,7 +386,7 @@ export function PedidosContent({
 
       {/* Dialog: Ver Detalhes */}
       <Dialog open={isViewOpen} onOpenChange={setIsViewOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-h-[92svh] max-w-lg overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Detalhes do Pedido</DialogTitle>
             <DialogDescription>
@@ -378,6 +429,65 @@ export function PedidosContent({
                   <p className="text-sm">{selectedPedido.observacoes}</p>
                 </div>
               )}
+
+              <div className="rounded-2xl border border-[#E3DAF4] bg-[#F5F3FA] p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-[#333333]">
+                      Acompanhamento da cliente
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      Gera um token protegido e envia apenas dados publicos do pedido.
+                    </p>
+                  </div>
+                  <Send className="mt-1 h-4 w-4 shrink-0 text-[#8F7DB9]" />
+                </div>
+
+                <Button
+                  type="button"
+                  className="mt-4 min-h-11 w-full rounded-xl"
+                  onClick={handleSendTrackingLink}
+                  disabled={isPending}
+                >
+                  <Send className="mr-2 h-4 w-4" />
+                  {isPending ? 'Gerando link...' : 'Enviar link de acompanhamento'}
+                </Button>
+
+                {trackingLink ? (
+                  <div className="mt-3 rounded-xl border border-[#E3DAF4] bg-white p-3">
+                    <p className="break-all text-xs text-[#666666]">{trackingLink}</p>
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="rounded-lg"
+                        onClick={() => copyTrackingLink(trackingLink)}
+                      >
+                        <Copy className="mr-2 h-3.5 w-3.5" />
+                        Copiar link
+                      </Button>
+
+                      {trackingWhatsAppUrl ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="rounded-lg"
+                          onClick={() => {
+                            const opened = openExternalUrl(trackingWhatsAppUrl)
+                            if (!opened) {
+                              toast.info('Copie o link e envie pelo WhatsApp manualmente.')
+                            }
+                          }}
+                        >
+                          <Send className="mr-2 h-3.5 w-3.5" />
+                          Abrir WhatsApp
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             </div>
           )}
         </DialogContent>

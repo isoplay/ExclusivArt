@@ -12,6 +12,9 @@ import { logServerError } from '@/lib/server-log'
 const EMPTY_DASHBOARD_METRICS = {
   totalPedidosMes: 0,
   receitaMes: 0,
+  receitaPedidosSistema: 0,
+  receitaHistorica: 0,
+  totalVendidoDesdeInicio: 0,
   pedidosPendentes: 0,
   materiaisSemEstoque: 0,
   materiaisBaixoEstoque: 0,
@@ -79,6 +82,15 @@ export async function getDashboardMetrics() {
 
     supabase
       .from('pedidos')
+      .select('valor_total,status')
+      .in('status', ['pronto', 'entregue']),
+
+    supabase
+      .from('vendas_historicas')
+      .select('valor_total'),
+
+    supabase
+      .from('pedidos')
       .select('*')
       .in('status', ['orcamento', 'confirmado', 'em_producao', 'pronto']),
 
@@ -128,6 +140,8 @@ export async function getDashboardMetrics() {
 
   const [
     pedidosMesResult,
+    todosPedidosReceitaResult,
+    vendasHistoricasResult,
     pedidosPendentesResult,
     todosMateriaisResult,
     despesasMesResult,
@@ -141,6 +155,22 @@ export async function getDashboardMetrics() {
 
   if (pedidosError) {
     logServerError('dashboard_pedidos_mes_failed', pedidosError, { table: 'pedidos' })
+  }
+
+  const { data: todosPedidosReceita, error: todosPedidosReceitaError } = todosPedidosReceitaResult
+
+  if (todosPedidosReceitaError) {
+    logServerError('dashboard_todos_pedidos_receita_failed', todosPedidosReceitaError, {
+      table: 'pedidos',
+    })
+  }
+
+  const { data: vendasHistoricas, error: vendasHistoricasError } = vendasHistoricasResult
+
+  if (vendasHistoricasError) {
+    logServerError('dashboard_vendas_historicas_failed', vendasHistoricasError, {
+      table: 'vendas_historicas',
+    })
   }
 
   const { data: pedidosPendentes, error: pendentesError } = pedidosPendentesResult
@@ -176,6 +206,16 @@ export async function getDashboardMetrics() {
     }
     return acc
   }, 0)
+  const receitaPedidosSistema = (todosPedidosReceita || []).reduce(
+    (acc: number, pedido: Pick<Pedido, 'valor_total' | 'status'>) => {
+      return acc + toNumber(pedido.valor_total)
+    },
+    0
+  )
+  const receitaHistorica = (vendasHistoricas || []).reduce(
+    (acc: number, venda: { valor_total: unknown }) => acc + toNumber(venda.valor_total),
+    0
+  )
 
   const despesasTotalMes = (despesasMes || []).reduce(
     (acc: number, d: Despesa) => acc + toNumber(d.valor),
@@ -239,6 +279,9 @@ export async function getDashboardMetrics() {
   return {
     totalPedidosMes: pedidosMes?.length || 0,
     receitaMes,
+    receitaPedidosSistema,
+    receitaHistorica,
+    totalVendidoDesdeInicio: receitaPedidosSistema + receitaHistorica,
     pedidosPendentes: pedidosPendentes?.length || 0,
     materiaisSemEstoque: materiaisSemEstoque.length,
     materiaisBaixoEstoque: materiaisLowStock.length,

@@ -434,7 +434,7 @@ export function OperacaoContent({ data }: { data: OperacaoData }) {
               <CardHeader>
                 <CardTitle>Simulador rapido</CardTitle>
                 <CardDescription>
-                  Previa local. Nao altera o produto salvo.
+                  Calcula no navegador e nao altera o produto salvo.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">

@@ -1,10 +1,13 @@
 'use server'
 
+import { createHash, randomBytes } from 'node:crypto'
+import { headers } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { createAuthenticatedClient } from '@/lib/auth'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Pedido, PedidoComItens, Produto, StatusPedido, Material, ProdutoMaterial } from '@/lib/types/database'
 import { arredondarParaCimaMeioReal } from '@/lib/utils'
+import { logServerError } from '@/lib/server-log'
 
 function normalizeKey(value: string | null | undefined) {
   return String(value ?? '')
@@ -165,6 +168,66 @@ const statusPermitidos: StatusPedido[] = [
   'cancelado',
 ]
 
+const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+function createTrackingToken() {
+  return randomBytes(32).toString('base64url')
+}
+
+function hashTrackingToken(token: string) {
+  return createHash('sha256').update(token).digest('hex')
+}
+
+function normalizeWhatsAppPhone(value: string | null | undefined) {
+  const digits = String(value ?? '').replace(/\D/g, '')
+
+  if (digits.length === 10 || digits.length === 11) {
+    return `55${digits}`
+  }
+
+  if (digits.length >= 12 && digits.length <= 13) {
+    return digits
+  }
+
+  return null
+}
+
+function buildTrackingMessage(clienteNome: string, trackingUrl: string) {
+  return `Olá, ${clienteNome}! Aqui está o link para acompanhar seu pedido da Exclusiv ART: ${trackingUrl}`
+}
+
+export type GerarLinkAcompanhamentoResult =
+  | {
+      success: true
+      trackingUrl: string
+      whatsappUrl: string
+      hasClientPhone: boolean
+      expiresAt: string
+    }
+  | {
+      success: false
+      error: string
+    }
+
+async function getRequestBaseUrl() {
+  const headersList = await headers()
+  const envUrl =
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '')
+
+  if (envUrl) {
+    return envUrl.replace(/\/+$/, '')
+  }
+
+  const forwardedProto = headersList.get('x-forwarded-proto')
+  const protocol = forwardedProto === 'http' ? 'http' : 'https'
+  const rawHost = headersList.get('x-forwarded-host') || headersList.get('host') || 'localhost:3000'
+  const host = /^[a-z0-9.-]+(?::\d+)?$/i.test(rawHost) ? rawHost : 'localhost:3000'
+
+  return `${protocol}://${host}`
+}
+
 function validatePedidoBasico(clienteNome: string, prazoEntrega?: string | null) {
   if (!clienteNome.trim() || clienteNome.length > 120) return 'Nome do cliente invalido'
   if (prazoEntrega && Number.isNaN(Date.parse(prazoEntrega))) {
@@ -194,10 +257,8 @@ export async function createPedido(
     return { success: false, error: 'Itens do pedido invalidos' }
   }
 
-  // Calculate total
   const valor_total = itens.reduce((acc, item) => acc + item.valor_unitario * item.quantidade, 0)
 
-  // Insert order
   const { data: pedido, error: pedidoError } = await supabase
     .from('pedidos')
     .insert({
@@ -218,7 +279,6 @@ export async function createPedido(
     return { success: false, error: pedidoError?.message || 'Erro ao criar pedido' }
   }
 
-  // Insert items
   if (itens.length > 0) {
     const itensToInsert = itens.map(item => ({
       pedido_id: pedido.id,
@@ -358,6 +418,75 @@ export async function updatePedidoStatus(id: string, status: StatusPedido) {
   revalidatePath('/dashboard')
   revalidatePath('/dashboard/estoque')
   return { success: true }
+}
+
+export async function gerarLinkAcompanhamentoPedido(
+  pedidoId: string
+): Promise<GerarLinkAcompanhamentoResult> {
+  if (!uuidRegex.test(pedidoId)) {
+    return { success: false, error: 'Pedido invalido' }
+  }
+
+  const supabase = await createAuthenticatedClient()
+
+  const { data: pedido, error: pedidoError } = await supabase
+    .from('pedidos')
+    .select('id, cliente_nome, cliente_contato')
+    .eq('id', pedidoId)
+    .maybeSingle()
+
+  if (pedidoError || !pedido) {
+    logServerError('pedido_tracking_link_pedido_failed', pedidoError, {
+      table: 'pedidos',
+      pedidoId,
+    })
+    return { success: false, error: 'Pedido nao encontrado' }
+  }
+
+  const token = createTrackingToken()
+  const tokenHash = hashTrackingToken(token)
+  const expiresAt = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString()
+
+  const { error } = await supabase
+    .from('pedido_acompanhamento_links')
+    .upsert(
+      {
+        pedido_id: pedido.id,
+        token_hash: tokenHash,
+        ativo: true,
+        last_sent_at: new Date().toISOString(),
+        expires_at: expiresAt,
+      },
+      { onConflict: 'pedido_id' }
+    )
+
+  if (error) {
+    logServerError('pedido_tracking_link_upsert_failed', error, {
+      table: 'pedido_acompanhamento_links',
+      pedidoId,
+    })
+    return {
+      success: false,
+      error: 'Nao foi possivel gerar o link. Execute a migration de acompanhamento no Supabase.',
+    }
+  }
+
+  const baseUrl = await getRequestBaseUrl()
+  const trackingUrl = `${baseUrl}/acompanhar/${token}`
+  const message = buildTrackingMessage(pedido.cliente_nome, trackingUrl)
+  const whatsappPhone = normalizeWhatsAppPhone(pedido.cliente_contato)
+  const whatsappUrl = whatsappPhone
+    ? `https://wa.me/${whatsappPhone}?text=${encodeURIComponent(message)}`
+    : `https://wa.me/?text=${encodeURIComponent(message)}`
+
+  revalidatePath('/dashboard/pedidos')
+  return {
+    success: true,
+    trackingUrl,
+    whatsappUrl,
+    hasClientPhone: Boolean(whatsappPhone),
+    expiresAt,
+  }
 }
 
 export type MaterialBaixaPreview = {
@@ -779,17 +908,8 @@ export async function createPedidoCustomizado(params: {
       return { success: false, error: 'Erro ao carregar materiais selecionados' }
     }
 
-    // ===================================================================
-    // REGRA OBRIGATÓRIA EXCLUSIVART - CÁLCULO DE PEDIDO (createPedidoCustomizado)
-    // ===================================================================
-    // - Usar SEMPRE o custo real do material (nunca margem por componente)
-    // - Somar custo total dos materiais (considerando quantidade_itens)
-    // - Somar mão de obra × quantidade_itens
-    // - Formar custo base total
-    // - Aplicar margem % SOMENTE sobre o custo base total do pedido
-    // - Arredondar para cima de R$ 0,50 SOMENTE no valor final do pedido
-    // - NUNCA arredondar por unidade ou por componente
-    // ===================================================================
+    // Preco do pedido: custo real de materiais + mao de obra, depois margem no total.
+    // O arredondamento entra uma unica vez, no valor final do pedido.
 
     const margemPercentual = Math.max(0, params.margem_percentual ?? 100)
 
@@ -836,7 +956,6 @@ export async function createPedidoCustomizado(params: {
       }
     }
 
-    // Create pedido
     const { data: pedido, error: pedidoError } = await supabase
       .from('pedidos')
       .insert({
@@ -857,7 +976,6 @@ export async function createPedidoCustomizado(params: {
       return { success: false, error: pedidoError?.message || 'Erro ao criar pedido' }
     }
 
-    // Create pedido item
     const { data: pedidoItem, error: itemError } = await supabase
       .from('pedido_itens')
       .insert({
@@ -875,7 +993,6 @@ export async function createPedidoCustomizado(params: {
       return { success: false, error: 'Erro ao adicionar item' }
     }
 
-    // Add materials to pedido item
     const materiais = componentesSelecionados.map((c) => ({
       pedido_item_id: pedidoItem.id,
       material_id: c.material_id,

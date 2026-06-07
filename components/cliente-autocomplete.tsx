@@ -39,7 +39,7 @@ export function ClienteAutocomplete({
   const [isLoading, setIsLoading] = useState(false)
   const wrapperRef = useRef<HTMLDivElement>(null)
 
-  // Close dropdown when clicking/tapping outside (pointerdown works for mouse + touch devices)
+  // pointerdown fecha antes do foco mudar e funciona bem em touch.
   useEffect(() => {
     function handlePointerOutside(event: PointerEvent) {
       if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
@@ -50,7 +50,7 @@ export function ClienteAutocomplete({
     return () => document.removeEventListener('pointerdown', handlePointerOutside)
   }, [])
 
-  // Debounced search
+  // Pequeno debounce para nao bater no banco a cada tecla.
   const performSearch = useCallback(async (searchQuery: string) => {
     if (searchQuery.length < 2) {
       setSuggestions([])

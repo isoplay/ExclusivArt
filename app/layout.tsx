@@ -46,7 +46,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    // Adicionamos o suppressHydrationWarning aqui para ignorar as extensões do navegador
+    // Evita falso positivo de hydration quando extensoes do navegador alteram o HTML antes do React.
     <html lang="pt-BR" suppressHydrationWarning>
       <head>
         <link rel="apple-touch-icon" href="/apple-icon.png" />
@@ -54,10 +54,6 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="mobile-web-app-capable" content="yes" />
       </head>
-      {/* Certifique-se de que a variável 'poppins' está importada no topo do arquivo.
-          Se o visual continuar quebrado, verifique se 'import "./globals.css"' 
-          está na primeira linha deste arquivo.
-      */}
       <body className={`${poppins.variable} font-sans antialiased`} suppressHydrationWarning>
         <ThemeProvider
           attribute="class"

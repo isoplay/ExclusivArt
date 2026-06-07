@@ -52,6 +52,8 @@ export function saveOfflineSnapshot(partial: Partial<Pick<OfflineSnapshot, 'mate
   if (!isBrowser()) return
 
   try {
+    // Mantem o ultimo bloco valido de cada lista. Assim Estoque e Produtos podem
+    // atualizar o cache em momentos diferentes sem apagar a outra leitura.
     const current = readOfflineSnapshot()
     const next: OfflineSnapshot = {
       version: 1,
@@ -63,7 +65,7 @@ export function saveOfflineSnapshot(partial: Partial<Pick<OfflineSnapshot, 'mate
     window.localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(next))
     window.dispatchEvent(new CustomEvent('exclusiv-art:offline-snapshot-updated'))
   } catch {
-    // Storage can be unavailable in private mode. Offline cache is best effort.
+    // Safari privado e alguns WebViews bloqueiam storage. Nesse caso o app segue online normal.
   }
 }
 

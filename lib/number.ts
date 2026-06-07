@@ -19,6 +19,7 @@ export function parseDecimalInput(
   const decimalSeparator = getDecimalSeparator(unsigned, commaIndex, dotIndex)
 
   if (!decimalSeparator) {
+    // Sem separador decimal, ponto e virgula entram como marcadores de milhar.
     const number = Number(`${sign}${unsigned.replace(/[,.]/g, '')}`)
     return Number.isFinite(number) ? number : 0
   }
@@ -33,6 +34,7 @@ export function parseDecimalInput(
 
 function getDecimalSeparator(value: string, commaIndex: number, dotIndex: number) {
   if (commaIndex >= 0 && dotIndex >= 0) {
+    // Em entradas como "1.234,56" e "1,234.56", o ultimo separador e o decimal.
     return commaIndex > dotIndex ? ',' : '.'
   }
 

@@ -2,7 +2,7 @@
 const isDev = process.env.NODE_ENV === 'development'
 
 const nextConfig = {
-  allowedDevOrigins: ['192.168.0.2', 'localhost'],
+  allowedDevOrigins: ['127.0.0.1', 'localhost', '192.168.0.2'],
   poweredByHeader: false,
   experimental: {
     serverActions: {

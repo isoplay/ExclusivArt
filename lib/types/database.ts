@@ -34,7 +34,7 @@ export type ProdutoMaterial = {
   produto_id: string
   material_id: string
   quantidade_usada: number
-  // Joins
+  // Relacionamentos carregados apenas quando a query pede.
   material?: Material
   produto?: Produto
 }
@@ -88,12 +88,36 @@ export type PedidoItem = {
   quantidade: number
   valor_unitario: number
   valor_total: number
-  // Joins
+  // Relacionamentos carregados apenas quando a query pede.
   produto?: Produto
 }
 
 export type PedidoComItens = Pedido & {
   pedido_itens: (PedidoItem & { produto: Produto })[]
+}
+
+export type PedidoAcompanhamentoLink = {
+  id: string
+  pedido_id: string
+  token_hash: string
+  ativo: boolean
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  last_sent_at: string | null
+  last_accessed_at: string | null
+  expires_at: string | null
+}
+
+export type PedidoAcompanhamentoPublico = {
+  cliente_nome: string
+  pedido_codigo: string
+  status: StatusPedido
+  prazo_entrega: string | null
+  produto_resumo: string
+  quantidade_total: number
+  valor_total: number
+  data_pedido: string
 }
 
 export type CategoriaDespesa =
@@ -113,6 +137,18 @@ export type Despesa = {
   data_pedido: string
 }
 
+export type VendaHistorica = {
+  id: string
+  data_venda: string
+  cliente_nome: string | null
+  descricao: string
+  quantidade: number
+  valor_total: number
+  origem: string
+  observacoes: string | null
+  created_at: string
+}
+
 export type TipoMovimentacao = 'entrada' | 'saida'
 
 export type MovimentacaoEstoque = {
@@ -123,7 +159,7 @@ export type MovimentacaoEstoque = {
   motivo: string | null
   pedido_id: string | null
   created_at: string
-  // Joins
+  // Relacionamentos carregados apenas quando a query pede.
   material?: Material
 }
 
@@ -132,7 +168,7 @@ export type PedidoItemMaterial = {
   pedido_item_id: string
   material_id: string
   quantidade: number
-  // Joins
+  // Relacionamentos carregados apenas quando a query pede.
   material?: Material
   pedido_item?: PedidoItem
 }
@@ -141,7 +177,7 @@ export type PedidoItemComMateriais = PedidoItem & {
   pedido_itens_materiais?: PedidoItemMaterial[]
 }
 
-// Dashboard metrics view
+// Resultado usado em cards antigos do dashboard.
 export type DashboardMetrics = {
   total_pedidos_mes: number
   receita_mes: number
@@ -149,9 +185,7 @@ export type DashboardMetrics = {
   materiais_baixo_estoque: number
 }
 
-// ============================================
-// Item Builder Types (New)
-// ============================================
+// Tipos do montador de pedidos.
 
 export type CategoriaProduto = {
   id: string
@@ -159,35 +193,35 @@ export type CategoriaProduto = {
   descricao: string | null
   ativo: boolean
   ordem: number
-  data_pedido?: string  // Optional - only included in some queries
+  data_pedido?: string
   updated_at: string
 }
 
 export type VariacaoTipo = {
   id: string
-  categoria_id?: string  // Optional - not always included in nested queries
+  categoria_id?: string
   nome: string
   descricao: string | null
   ativo: boolean
   ordem: number
-  data_pedido?: string  // Optional - only included in some queries
+  data_pedido?: string
   updated_at: string
-  // Joins
+  // Relacionamentos carregados apenas quando a query pede.
   categoria?: CategoriaProduto
 }
 
 export type GrupoComponente = {
   id: string
-  categoria_id?: string  // Optional - not always included in nested queries
+  categoria_id?: string
   nome: string
   descricao: string | null
   obrigatorio: boolean
   permite_multipla_selecao: boolean
   ordem: number
   ativo: boolean
-  data_pedido?: string  // Optional - only included in some queries
+  data_pedido?: string
   updated_at: string
-  // Joins
+  // Relacionamentos carregados apenas quando a query pede.
   categoria?: CategoriaProduto
   componentes?: ComponenteEstoque[]
 }
@@ -201,7 +235,7 @@ export type ComponenteEstoque = {
   ordem: number
   data_pedido: string
   updated_at: string
-  // Joins
+  // Relacionamentos carregados apenas quando a query pede.
   grupo?: GrupoComponente
   material?: Material
 }
@@ -212,7 +246,7 @@ export type ConfiguracaoMaodeobra = {
   valor_maodeobra: number
   descricao: string | null
   updated_at: string
-  // Joins
+  // Relacionamentos carregados apenas quando a query pede.
   categoria?: CategoriaProduto
 }
 
@@ -225,7 +259,7 @@ export type TipoComponenteConfig = {
   ordem: number
 }
 
-// View types for Item Builder UI
+// Formato achatado usado pela tela do montador.
 export type CategoriaCompleta = {
   categoria_id: string
   categoria_nome: string

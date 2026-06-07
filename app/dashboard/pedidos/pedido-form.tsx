@@ -116,13 +116,8 @@ export function PedidoForm({
   )
   const maodeobraUnitario = maodeobra[categoriaSelecionada] || 0
 
-  // ===================================================================
-  // CÁLCULO DE VISUALIZAÇÃO NO FORMULÁRIO (segue rigorosamente a regra ExclusivArt)
-  // ===================================================================
-  // - Componentes mostram custo real (sem margem)
-  // - Margem e arredondamento são aplicados SOMENTE no total final do pedido
-  // - NUNCA por componente, NUNCA por unidade antes de multiplicar quantidade
-  // ===================================================================
+  // Mesma conta usada ao salvar: componentes ficam a custo real; margem e
+  // arredondamento entram apenas no total do pedido.
   const custoMateriaisTotal = custoMateriaisUnitario * quantidadeItens
   const maodeobraTotal = maodeobraUnitario * quantidadeItens
   const custoBase = custoMateriaisTotal + maodeobraTotal
@@ -163,7 +158,7 @@ export function PedidoForm({
     const material = materiaisDoTipo.find((item) => item.id === materialAtual)
     if (!material || !grupoAtualObj) return
 
-    // Usar sempre o custo real cadastrado no material. Sem margem por componente.
+    // Componente entra pelo custo cadastrado no estoque.
     const custoUnit = material.custo_unitario || 0
 
     setComponentesSelecionados((prev) => {

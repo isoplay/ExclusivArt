@@ -7,6 +7,7 @@ import {
   Boxes,
   CalendarDays,
   ClipboardList,
+  History,
   LayoutDashboard,
   Package,
   Settings,
@@ -63,6 +64,11 @@ const menuItems = [
     title: 'Financeiro',
     url: '/dashboard/financeiro',
     icon: Wallet,
+  },
+  {
+    title: 'Histórico',
+    url: '/dashboard/historico-vendas',
+    icon: History,
   },
   {
     title: 'Configurações',
