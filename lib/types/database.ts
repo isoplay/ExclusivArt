@@ -77,6 +77,7 @@ export type Pedido = {
   observacoes: string | null
   valor_total: number
   estoque_baixado?: boolean
+  slug_acompanhamento?: string | null
   data_pedido: string
   updated_at: string
 }

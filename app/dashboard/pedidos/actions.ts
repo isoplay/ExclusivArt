@@ -178,6 +178,60 @@ function hashTrackingToken(token: string) {
   return createHash('sha256').update(token).digest('hex')
 }
 
+// Short, unique, non-predictable public slug for /p/[slug] tracking links.
+// Format example: EXA-0A1B-cOmUJBAJ (prefix + short entropy + random suffix)
+function createTrackingSlug(): string {
+  const rand1 = randomBytes(2).toString('hex').toUpperCase() // e.g. 0042 style
+  const rand2 = randomBytes(5).toString('base64url').replace(/[-_]/g, '').slice(0, 8)
+  return `EXA-${rand1}-${rand2}`
+}
+
+async function ensureTrackingSlug(
+  supabase: SupabaseClient,
+  pedidoId: string
+): Promise<string> {
+  // Idempotent: reuse if already present on the pedido row
+  const { data: current } = await supabase
+    .from('pedidos')
+    .select('slug_acompanhamento')
+    .eq('id', pedidoId)
+    .maybeSingle()
+
+  if (current?.slug_acompanhamento) {
+    return current.slug_acompanhamento as string
+  }
+
+  // Generate unique slug (retry on rare collision)
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const slug = createTrackingSlug()
+    const { data: conflict } = await supabase
+      .from('pedidos')
+      .select('id')
+      .eq('slug_acompanhamento', slug)
+      .maybeSingle()
+
+    if (conflict) continue
+
+    const { error } = await supabase
+      .from('pedidos')
+      .update({ slug_acompanhamento: slug })
+      .eq('id', pedidoId)
+
+    if (!error) {
+      return slug
+    }
+  }
+
+  // Fallback (still unique enough for this use case)
+  const fallback = `EXA-${pedidoId.replace(/-/g, '').slice(0, 8).toUpperCase()}`
+  await supabase
+    .from('pedidos')
+    .update({ slug_acompanhamento: fallback })
+    .eq('id', pedidoId)
+  // Intentionally ignore errors on fallback slug persistence (extremely rare)
+  return fallback
+}
+
 function normalizeWhatsAppPhone(value: string | null | undefined) {
   const digits = String(value ?? '').replace(/\D/g, '')
 
@@ -210,22 +264,35 @@ export type GerarLinkAcompanhamentoResult =
     }
 
 async function getRequestBaseUrl() {
-  const headersList = await headers()
-  const envUrl =
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    process.env.NEXT_PUBLIC_APP_URL ||
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '')
-
+  // Priority: explicit public site URL (set in Vercel env vars etc). Always use if present.
+  const envUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL
   if (envUrl) {
-    return envUrl.replace(/\/+$/, '')
+    return String(envUrl).trim().replace(/\/+$/, '')
   }
 
-  const forwardedProto = headersList.get('x-forwarded-proto')
-  const protocol = forwardedProto === 'http' ? 'http' : 'https'
-  const rawHost = headersList.get('x-forwarded-host') || headersList.get('host') || 'localhost:3000'
-  const host = /^[a-z0-9.-]+(?::\d+)?$/i.test(rawHost) ? rawHost : 'localhost:3000'
+  // Only fall back to request headers / VERCEL_URL in development.
+  // In production/preview without NEXT_PUBLIC_SITE_URL we avoid long preview domains
+  // (e.g. v0-erp-para-artesanato-*-vercel.app) and use a safe production default or prod URL.
+  const isDevelopment = process.env.NODE_ENV === 'development'
+  if (isDevelopment) {
+    const headersList = await headers()
+    const forwardedProto = headersList.get('x-forwarded-proto')
+    const protocol = forwardedProto === 'http' ? 'http' : 'https'
+    const rawHost =
+      headersList.get('x-forwarded-host') ||
+      headersList.get('host') ||
+      (process.env.VERCEL_URL ? process.env.VERCEL_URL : 'localhost:3000')
+    const host = /^[a-z0-9.-]+(?::\d+)?$/i.test(rawHost) ? rawHost : 'localhost:3000'
+    return `${protocol}://${host}`
+  }
 
-  return `${protocol}://${host}`
+  // Non-dev fallback: prefer Vercel's production project URL (if exposed) then hard safe default
+  // (prevents accidental long preview links when env var is not configured).
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`.replace(/\/+$/, '')
+  }
+
+  return 'https://exclusivart-artesanato.vercel.app'
 }
 
 function validatePedidoBasico(clienteNome: string, prazoEntrega?: string | null) {
@@ -443,36 +510,45 @@ export async function gerarLinkAcompanhamentoPedido(
     return { success: false, error: 'Pedido nao encontrado' }
   }
 
-  const token = createTrackingToken()
-  const tokenHash = hashTrackingToken(token)
-  const expiresAt = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString()
+  // Idempotent slug: reuse existing or generate+persist exactly once per pedido.
+  // New public links prefer the short /p/[slug] form.
+  const slug = await ensureTrackingSlug(supabase, pedido.id)
 
-  const { error } = await supabase
+  // Legacy token link: create the hash row ONLY if none exists yet.
+  // This keeps previously sent /acompanhar/[token] links working (no overwrite of token_hash).
+  const { data: existingLink } = await supabase
     .from('pedido_acompanhamento_links')
-    .upsert(
-      {
+    .select('id')
+    .eq('pedido_id', pedido.id)
+    .maybeSingle()
+
+  if (!existingLink) {
+    const token = createTrackingToken()
+    const tokenHash = hashTrackingToken(token)
+    const expiresAt = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString()
+
+    const { error: linkError } = await supabase
+      .from('pedido_acompanhamento_links')
+      .insert({
         pedido_id: pedido.id,
         token_hash: tokenHash,
         ativo: true,
         last_sent_at: new Date().toISOString(),
         expires_at: expiresAt,
-      },
-      { onConflict: 'pedido_id' }
-    )
+      })
 
-  if (error) {
-    logServerError('pedido_tracking_link_upsert_failed', error, {
-      table: 'pedido_acompanhamento_links',
-      pedidoId,
-    })
-    return {
-      success: false,
-      error: 'Nao foi possivel gerar o link. Execute a migration de acompanhamento no Supabase.',
+    if (linkError) {
+      logServerError('pedido_tracking_link_insert_failed', linkError, {
+        table: 'pedido_acompanhamento_links',
+        pedidoId,
+      })
+      // Do not fail the whole call — the slug link is still usable.
     }
   }
 
   const baseUrl = await getRequestBaseUrl()
-  const trackingUrl = `${baseUrl}/acompanhar/${token}`
+  // Prefer short public slug path. /acompanhar/[token] remains available for old links.
+  const trackingUrl = `${baseUrl}/p/${slug}`
   const message = buildTrackingMessage(pedido.cliente_nome, trackingUrl)
   const whatsappPhone = normalizeWhatsAppPhone(pedido.cliente_contato)
   const whatsappUrl = whatsappPhone
@@ -485,7 +561,7 @@ export async function gerarLinkAcompanhamentoPedido(
     trackingUrl,
     whatsappUrl,
     hasClientPhone: Boolean(whatsappPhone),
-    expiresAt,
+    expiresAt: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString(),
   }
 }
 
