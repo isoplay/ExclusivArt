@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { parseDecimalInput } from '@/lib/number'
+import { areDecimalValuesClose, parseDecimalInput, roundCurrency } from '@/lib/number'
 import { createAuthenticatedClient } from '@/lib/auth'
 import { logServerError } from '@/lib/server-log'
 import type { Material, TipoMovimentacao } from '@/lib/types/database'
@@ -82,6 +82,18 @@ function validateMaterialFields(nome: string, tipo: string, quantidade: number, 
   if (quantidade < 0 || quantidade > 1_000_000) return 'Quantidade invalida'
   if (custoUnitario < 0 || custoUnitario > 1_000_000) return 'Custo unitario invalido'
   return null
+}
+
+function toFiniteNumber(value: unknown) {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : 0
+  }
+
+  if (typeof value === 'string') {
+    return parseDecimalInput(value)
+  }
+
+  return 0
 }
 
 function getSafeImageUrl(value: FormDataEntryValue | null) {
@@ -251,8 +263,9 @@ export async function createMaterial(formData: FormData) {
   }
 
   // O cadastro trabalha com custo unitario; preco_compra guarda o custo total inicial.
-  const preco_compra =
+  const preco_compra = roundCurrency(
     custo_unitario_input > 0 ? custo_unitario_input * quantidade : preco_compra_input
+  )
 
   const insertData: Record<string, unknown> = {
     nome,
@@ -307,6 +320,19 @@ export async function updateMaterial(id: string, formData: FormData) {
     return { success: false, error: imagemUrlResult.error }
   }
 
+  const { data: materialAtual, error: materialAtualError } = await supabase
+    .from('materiais')
+    .select('preco_compra, quantidade, quantidade_atual, custo_unitario')
+    .eq('id', id)
+    .single()
+
+  if (materialAtualError || !materialAtual) {
+    logServerError('estoque_update_material_fetch_failed', materialAtualError, {
+      table: 'materiais',
+    })
+    return { success: false, error: 'Material nao encontrado' }
+  }
+
   let imagem_url: string | null | undefined = imagemUrlResult.url
   if (imagem && imagem.size > 0) {
     try {
@@ -323,15 +349,26 @@ export async function updateMaterial(id: string, formData: FormData) {
     }
   }
 
-  const preco_compra =
-    custo_unitario_input > 0 ? custo_unitario_input * quantidade : preco_compra_input
+  const quantidadeBaseAtual = toFiniteNumber(materialAtual.quantidade)
+  const quantidadeBase = quantidadeBaseAtual > 0 ? quantidadeBaseAtual : quantidade
+  const custoUnitarioAtual = toFiniteNumber(materialAtual.custo_unitario)
+  const precoCompraAtual = roundCurrency(toFiniteNumber(materialAtual.preco_compra))
+  const custoUnitarioAlterado =
+    custo_unitario_input > 0 &&
+    !areDecimalValuesClose(custo_unitario_input, custoUnitarioAtual, 4)
+
+  const preco_compra = custoUnitarioAlterado
+    ? roundCurrency(custo_unitario_input * quantidadeBase)
+    : preco_compra_input > 0 && custo_unitario_input <= 0
+      ? roundCurrency(preco_compra_input)
+      : precoCompraAtual
 
   const updateData: Record<string, unknown> = {
     nome,
     tipo,
     unidade,
     cor,
-    quantidade,
+    quantidade: quantidadeBase,
     quantidade_atual: quantidade,
     quantidade_minima,
     preco_compra,
@@ -424,7 +461,7 @@ export async function registrarMovimentacao(
 
   const { error: updateError } = await supabase
     .from('materiais')
-    .update({ quantidade: novaQuantidade, quantidade_atual: novaQuantidade })
+    .update({ quantidade_atual: novaQuantidade })
     .eq('id', materialId)
 
   if (updateError) {

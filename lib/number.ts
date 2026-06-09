@@ -32,6 +32,22 @@ export function parseDecimalInput(
   return Number.isFinite(number) ? number : 0
 }
 
+export function roundDecimal(value: number, decimals: number) {
+  if (!Number.isFinite(value)) return 0
+
+  const factor = 10 ** decimals
+  return Math.round((value + Number.EPSILON) * factor) / factor
+}
+
+export function roundCurrency(value: number) {
+  return roundDecimal(value, 2)
+}
+
+export function areDecimalValuesClose(value: number, comparison: number, decimals = 4) {
+  const tolerance = 1 / 10 ** decimals
+  return Math.abs(value - comparison) < tolerance
+}
+
 function getDecimalSeparator(value: string, commaIndex: number, dotIndex: number) {
   if (commaIndex >= 0 && dotIndex >= 0) {
     // Em entradas como "1.234,56" e "1,234.56", o ultimo separador e o decimal.

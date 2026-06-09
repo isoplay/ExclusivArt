@@ -70,6 +70,16 @@ function formatCurrency(value: number) {
   }).format(value)
 }
 
+function formatDecimalInput(value: number | null | undefined, maximumFractionDigits = 4) {
+  const number = Number(value ?? 0)
+  if (!Number.isFinite(number)) return '0'
+
+  return new Intl.NumberFormat('pt-BR', {
+    maximumFractionDigits,
+    useGrouping: false,
+  }).format(number)
+}
+
 function normalizeKey(value: string | null | undefined) {
   return String(value ?? '')
     .trim()
@@ -1030,7 +1040,7 @@ export function EstoqueContent({
                     name="quantidade"
                     type="text"
                     inputMode="decimal"
-                    defaultValue={getEstoqueAtual(selectedMaterial)}
+                    defaultValue={formatDecimalInput(getEstoqueAtual(selectedMaterial), 2)}
                   />
                 </div>
                 <div className="space-y-2">
@@ -1041,7 +1051,7 @@ export function EstoqueContent({
                     type="text"
                     inputMode="decimal"
                     required
-                    defaultValue={selectedMaterial.quantidade_minima ?? 30}
+                    defaultValue={formatDecimalInput(selectedMaterial.quantidade_minima ?? 30, 2)}
                   />
                 </div>
               </div>
@@ -1053,7 +1063,7 @@ export function EstoqueContent({
                   name="custo_unitario"
                   type="text"
                   inputMode="decimal"
-                  defaultValue={selectedMaterial.custo_unitario ?? 0}
+                  defaultValue={formatDecimalInput(selectedMaterial.custo_unitario ?? 0, 4)}
                 />
               </div>
 
