@@ -31,7 +31,7 @@ import { cn } from '@/lib/utils'
 
 const menuItems = [
   {
-    title: 'Dashboard',
+    title: 'Página inicial',
     url: '/dashboard',
     icon: LayoutDashboard,
   },

@@ -451,7 +451,7 @@ export function DashboardContent({
   return (
     <div className="flex w-full flex-col gap-6">
       <section>
-        <h1 className="text-3xl font-semibold tracking-tight text-[#15142a]">Dashboard</h1>
+        <h1 className="text-3xl font-semibold tracking-tight text-[#15142a]">Página inicial</h1>
         <p className="mt-2 text-sm text-[#706b82]">
           Visão geral do seu negócio em {currentMonth}.
         </p>
