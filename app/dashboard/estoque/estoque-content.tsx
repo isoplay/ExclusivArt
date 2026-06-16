@@ -1034,14 +1034,19 @@ export function EstoqueContent({
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="edit-quantidade">Quantidade</Label>
+                  <Label htmlFor="edit-estoque_atual">Estoque atual</Label>
                   <Input
-                    id="edit-quantidade"
-                    name="quantidade"
+                    id="edit-estoque_atual"
                     type="text"
                     inputMode="decimal"
+                    readOnly
+                    aria-describedby="edit-estoque_atual-help"
                     defaultValue={formatDecimalInput(getEstoqueAtual(selectedMaterial), 2)}
+                    className="bg-muted"
                   />
+                  <p id="edit-estoque_atual-help" className="text-xs text-muted-foreground">
+                    Use Entrada/Saida no menu do material para ajustar o estoque com historico.
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-quantidade_minima">Estoque mínimo</Label>

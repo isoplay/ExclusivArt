@@ -305,17 +305,12 @@ export async function updateMaterial(id: string, formData: FormData) {
   const tipo = formData.get('tipo') as string
   const unidade = formData.get('unidade') as string
   const cor = formData.get('cor') as string
-  const quantidade = parseDecimalInput(formData.get('quantidade'))
   const quantidade_minima = parseDecimalInput(formData.get('quantidade_minima')) || 30
   const custo_unitario_input = parseDecimalInput(formData.get('custo_unitario'))
   const preco_compra_input = parseDecimalInput(formData.get('preco_compra'))
   const imagem = formData.get('imagem') as File | null
   const imagemUrlResult = getSafeImageUrl(formData.get('imagem_url'))
-  const validationError = validateMaterialFields(nome, tipo, quantidade, custo_unitario_input)
 
-  if (validationError) {
-    return { success: false, error: validationError }
-  }
   if (imagemUrlResult.error) {
     return { success: false, error: imagemUrlResult.error }
   }
@@ -350,9 +345,16 @@ export async function updateMaterial(id: string, formData: FormData) {
   }
 
   const quantidadeBaseAtual = toFiniteNumber(materialAtual.quantidade)
-  const quantidadeBase = quantidadeBaseAtual > 0 ? quantidadeBaseAtual : quantidade
+  const estoqueAtual = toFiniteNumber(materialAtual.quantidade_atual ?? materialAtual.quantidade)
+  const quantidadeBase = quantidadeBaseAtual > 0 ? quantidadeBaseAtual : estoqueAtual
   const custoUnitarioAtual = toFiniteNumber(materialAtual.custo_unitario)
   const precoCompraAtual = roundCurrency(toFiniteNumber(materialAtual.preco_compra))
+  const validationError = validateMaterialFields(nome, tipo, quantidadeBase, custo_unitario_input)
+
+  if (validationError) {
+    return { success: false, error: validationError }
+  }
+
   const custoUnitarioAlterado =
     custo_unitario_input > 0 &&
     !areDecimalValuesClose(custo_unitario_input, custoUnitarioAtual, 4)
@@ -369,7 +371,6 @@ export async function updateMaterial(id: string, formData: FormData) {
     unidade,
     cor,
     quantidade: quantidadeBase,
-    quantidade_atual: quantidade,
     quantidade_minima,
     preco_compra,
   }
