@@ -17,6 +17,12 @@ function normalizeKey(value: string | null | undefined) {
     .replace(/[\u0300-\u036f]/g, '')
 }
 
+function cleanOptionalText(value: unknown, maxLength = 1200) {
+  const text = String(value ?? '').trim().replace(/\s+/g, ' ')
+  if (!text) return null
+  return text.slice(0, maxLength)
+}
+
 async function resolveProdutoIdForCategoria(
   supabase: SupabaseClient,
   categoriaId: string
@@ -314,6 +320,7 @@ export async function createPedido(
   const prazo_entrega = formData.get('prazo_entrega') as string
   const prioridade = parseInt(formData.get('prioridade') as string) || 1
   const observacoes = formData.get('observacoes') as string
+  const observacao_cliente = cleanOptionalText(formData.get('observacao_cliente'))
   const validationError = validatePedidoBasico(cliente_nome, prazo_entrega)
 
   if (validationError) {
@@ -337,6 +344,7 @@ export async function createPedido(
       prioridade,
       valor_total,
       observacoes: observacoes || null,
+      observacao_cliente,
     })
     .select()
     .single()
@@ -399,6 +407,16 @@ export async function updatePedido(
   const prazo_entrega = formData.get('prazo_entrega') as string
   const prioridade = parseInt(formData.get('prioridade') as string) || 1
   const observacoes = formData.get('observacoes') as string
+  const observacao_cliente = cleanOptionalText(formData.get('observacao_cliente'))
+  const validationError = validatePedidoBasico(cliente_nome, prazo_entrega)
+
+  if (validationError) {
+    return { success: false, error: validationError }
+  }
+
+  if (itens.some((item) => item.quantidade <= 0 || item.quantidade > 10000 || item.valor_unitario < 0)) {
+    return { success: false, error: 'Itens do pedido invalidos' }
+  }
 
   // Calculate total
   const valor_total = itens.reduce((acc, item) => acc + item.valor_unitario * item.quantidade, 0)
@@ -413,6 +431,7 @@ export async function updatePedido(
       prioridade,
       valor_total,
       observacoes: observacoes || null,
+      observacao_cliente,
     })
     .eq('id', id)
 
@@ -461,6 +480,34 @@ export async function updatePedido(
 
   revalidatePath('/dashboard/pedidos')
   revalidatePath('/dashboard')
+  return { success: true }
+}
+
+export async function updatePedidoObservacaoCliente(
+  id: string,
+  observacaoCliente: string
+) {
+  if (!uuidRegex.test(id)) {
+    return { success: false, error: 'Pedido invalido' }
+  }
+
+  const supabase = await createAuthenticatedClient()
+  const observacao_cliente = cleanOptionalText(observacaoCliente)
+
+  const { error } = await supabase
+    .from('pedidos')
+    .update({ observacao_cliente })
+    .eq('id', id)
+
+  if (error) {
+    console.error('Error updating customer note:', error)
+    return { success: false, error: error.message }
+  }
+
+  revalidatePath('/dashboard/pedidos')
+  revalidatePath('/dashboard')
+  revalidatePath('/p/[slug]', 'page')
+  revalidatePath('/acompanhar/[token]', 'page')
   return { success: true }
 }
 
@@ -937,6 +984,7 @@ export async function createPedidoCustomizado(params: {
   componentes: Array<{ material_id: string; quantidade: number }>
   prazo_entrega: string
   observacoes: string | null
+  observacao_cliente?: string | null
   margem_percentual?: number
 }) {
   const supabase = await createAuthenticatedClient()
@@ -1042,6 +1090,7 @@ export async function createPedidoCustomizado(params: {
         prioridade: 1,
         valor_total: valorTotal,
         observacoes: params.observacoes,
+        observacao_cliente: cleanOptionalText(params.observacao_cliente),
         tipo_produto_id: params.categoria_id,
       })
       .select()

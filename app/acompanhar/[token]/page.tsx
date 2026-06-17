@@ -75,6 +75,7 @@ function mapTrackingData(payload: PedidoAcompanhamentoPublico): OrderTrackingDat
     product: payload.produto_resumo,
     quantity: formatQuantity(payload.quantidade_total),
     totalValue: formatCurrency(Number(payload.valor_total ?? 0)),
+    customerNote: payload.observacao_cliente || null,
     message: getStatusMessage(payload.status),
   }
 }

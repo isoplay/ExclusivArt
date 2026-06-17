@@ -24,6 +24,7 @@ export type OrderTrackingData = {
   product: string
   quantity: string
   totalValue: string
+  customerNote?: string | null
   message: string
 }
 
@@ -325,6 +326,17 @@ export function OrderTrackingPreview({ order }: { order: OrderTrackingData }) {
               <SummaryRow icon={Wallet} label="Valor total" value={order.totalValue} strong />
               <SummaryRow icon={CalendarDays} label="Prazo previsto" value={order.expectedDate} />
             </dl>
+
+            {order.customerNote ? (
+              <div className="mt-6 rounded-2xl border border-[#E3DAF4] bg-[#F5F3FA]/72 px-4 py-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8F7DB9]">
+                  Observação para o cliente
+                </p>
+                <p className="mt-3 text-sm leading-6 text-[#333333]">
+                  {order.customerNote}
+                </p>
+              </div>
+            ) : null}
           </div>
 
           <div className="tracking-card tracking-rise flex flex-col justify-between gap-7 p-6 [animation-delay:270ms] sm:p-8">

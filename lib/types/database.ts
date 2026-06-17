@@ -75,6 +75,7 @@ export type Pedido = {
   status: StatusPedido
   prioridade: number
   observacoes: string | null
+  observacao_cliente?: string | null
   valor_total: number
   estoque_baixado?: boolean
   slug_acompanhamento?: string | null
@@ -118,6 +119,7 @@ export type PedidoAcompanhamentoPublico = {
   produto_resumo: string
   quantidade_total: number
   valor_total: number
+  observacao_cliente: string | null
   data_pedido: string
 }
 

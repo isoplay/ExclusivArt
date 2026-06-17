@@ -5,6 +5,12 @@ import { createAuthenticatedClient } from '@/lib/auth'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { arredondarParaCimaMeioReal } from '@/lib/utils'
 
+function cleanOptionalText(value: unknown, maxLength = 1200) {
+  const text = String(value ?? '').trim().replace(/\s+/g, ' ')
+  if (!text) return null
+  return text.slice(0, maxLength)
+}
+
 async function resolveProdutoIdForCategoria(
   supabase: SupabaseClient,
   categoriaId: string
@@ -326,7 +332,8 @@ export async function criarPedidoComMontagem(
     quantidade: number
   }>,
   quantidade_itens: number,
-  observacoes: string | null = null
+  observacoes: string | null = null,
+  observacao_cliente: string | null = null
 ) {
   const supabase = await createAuthenticatedClient()
 
@@ -381,6 +388,7 @@ export async function criarPedidoComMontagem(
         status: 'orcamento',
         valor_total,
         observacoes: observacoesFinal,
+        observacao_cliente: cleanOptionalText(observacao_cliente),
         prioridade: 1,
       })
       .select()

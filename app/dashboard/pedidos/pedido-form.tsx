@@ -86,6 +86,7 @@ export function PedidoForm({
 
   const [showResumo, setShowResumo] = useState(false)
   const [observacoes, setObservacoes] = useState('')
+  const [observacaoCliente, setObservacaoCliente] = useState('')
   const [grupoAtual, setGrupoAtual] = useState('')
   const [materialAtual, setMaterialAtual] = useState('')
 
@@ -137,6 +138,7 @@ export function PedidoForm({
     setComponentesSelecionados([])
     setShowResumo(false)
     setObservacoes('')
+    setObservacaoCliente('')
     setGrupoAtual('')
     setMaterialAtual('')
     setMargemPercentual(100)
@@ -258,6 +260,7 @@ export function PedidoForm({
           })),
           prazo_entrega: prazoEntrega,
           observacoes: observacoes || null,
+          observacao_cliente: observacaoCliente || null,
           margem_percentual: margemPercentual,
         })
 
@@ -356,10 +359,10 @@ export function PedidoForm({
               </div>
             </div>
 
-            {observacoes && (
+            {observacaoCliente && (
               <div className="rounded-lg border p-3">
-                <p className="text-sm font-semibold">Observações</p>
-                <p className="text-sm text-muted-foreground">{observacoes}</p>
+                <p className="text-sm font-semibold">Observação para o cliente</p>
+                <p className="text-sm text-muted-foreground">{observacaoCliente}</p>
               </div>
             )}
 
@@ -611,14 +614,18 @@ export function PedidoForm({
         {componentesSelecionados.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Observações</CardTitle>
+              <CardTitle className="text-lg">Observação para o cliente</CardTitle>
+              <CardDescription>
+                Texto opcional exibido nos detalhes e no link público de acompanhamento.
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <Textarea
-                value={observacoes}
-                onChange={(event) => setObservacoes(event.target.value)}
-                placeholder="Adicione observações sobre este pedido..."
+                value={observacaoCliente}
+                onChange={(event) => setObservacaoCliente(event.target.value)}
+                placeholder="Ex: Terço personalizado com o nome Kiliane, entremeio e crucifixo resinados"
                 rows={4}
+                maxLength={1200}
               />
             </CardContent>
           </Card>

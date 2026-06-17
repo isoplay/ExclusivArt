@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog,
   DialogContent,
@@ -36,7 +37,12 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Plus, Copy, MoreHorizontal, Search, Eye, Send, Trash2, Clock } from 'lucide-react'
 import type { Material, PedidoComItens, StatusPedido } from '@/lib/types/database'
-import { deletePedido, gerarLinkAcompanhamentoPedido, updatePedidoStatus } from './actions'
+import {
+  deletePedido,
+  gerarLinkAcompanhamentoPedido,
+  updatePedidoObservacaoCliente,
+  updatePedidoStatus,
+} from './actions'
 import { PedidoForm } from './pedido-form'
 import { toast } from 'sonner'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -102,6 +108,7 @@ export function PedidosContent({
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [isViewOpen, setIsViewOpen] = useState(false)
   const [selectedPedido, setSelectedPedido] = useState<PedidoComItens | null>(null)
+  const [observacaoClienteEdit, setObservacaoClienteEdit] = useState('')
   const [trackingLink, setTrackingLink] = useState<string | null>(null)
   const [trackingWhatsAppUrl, setTrackingWhatsAppUrl] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
@@ -150,6 +157,7 @@ export function PedidosContent({
 
   function openView(pedido: PedidoComItens) {
     setSelectedPedido(pedido)
+    setObservacaoClienteEdit(pedido.observacao_cliente || '')
     setTrackingLink(null)
     setTrackingWhatsAppUrl(null)
     setIsViewOpen(true)
@@ -189,6 +197,28 @@ export function PedidosContent({
         )
       } else {
         toast.info('Link gerado e copiado. Use o botao Abrir WhatsApp se o navegador bloquear.')
+      }
+    })
+  }
+
+  async function handleSaveObservacaoCliente() {
+    if (!selectedPedido) return
+
+    startTransition(async () => {
+      const result = await updatePedidoObservacaoCliente(
+        selectedPedido.id,
+        observacaoClienteEdit
+      )
+
+      if (result.success) {
+        toast.success('Observação para o cliente salva.')
+        setSelectedPedido({
+          ...selectedPedido,
+          observacao_cliente: observacaoClienteEdit.trim() || null,
+        })
+        router.refresh()
+      } else {
+        toast.error(result.error || 'Erro ao salvar observação')
       }
     })
   }
@@ -429,6 +459,35 @@ export function PedidosContent({
                   <p className="text-sm">{selectedPedido.observacoes}</p>
                 </div>
               )}
+
+              <div className="rounded-2xl border border-[#E3DAF4] bg-white p-4">
+                <div className="mb-3">
+                  <p className="text-sm font-semibold text-[#333333]">
+                    Observação para o cliente
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    Aparece nos detalhes do pedido e no link público de acompanhamento.
+                  </p>
+                </div>
+                <Textarea
+                  value={observacaoClienteEdit}
+                  onChange={(event) => setObservacaoClienteEdit(event.target.value)}
+                  placeholder="Ex: Terço personalizado com o nome Kiliane, entremeio e crucifixo resinados"
+                  rows={4}
+                  maxLength={1200}
+                />
+                <div className="mt-3 flex justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSaveObservacaoCliente}
+                    disabled={isPending}
+                  >
+                    {isPending ? 'Salvando...' : 'Salvar observação'}
+                  </Button>
+                </div>
+              </div>
 
               <div className="rounded-2xl border border-[#E3DAF4] bg-[#F5F3FA] p-4">
                 <div className="flex items-start justify-between gap-3">
