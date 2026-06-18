@@ -78,6 +78,8 @@ export type Pedido = {
   observacao_cliente?: string | null
   valor_total: number
   estoque_baixado?: boolean
+  tipo_produto_id?: string | null
+  variacao_id?: string | null
   slug_acompanhamento?: string | null
   data_pedido: string
   updated_at: string
@@ -95,7 +97,10 @@ export type PedidoItem = {
 }
 
 export type PedidoComItens = Pedido & {
-  pedido_itens: (PedidoItem & { produto: Produto })[]
+  pedido_itens: (PedidoItem & {
+    produto: Produto
+    pedido_itens_materiais?: (PedidoItemMaterial & { material?: Material })[]
+  })[]
 }
 
 export type PedidoAcompanhamentoLink = {

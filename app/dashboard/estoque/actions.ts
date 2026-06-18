@@ -284,18 +284,23 @@ export async function createMaterial(formData: FormData) {
     insertData.imagem_url = imagem_url
   }
 
-  const { error } = await supabase.from('materiais').insert(insertData)
+  const { data: material, error } = await supabase
+    .from('materiais')
+    .insert(insertData)
+    .select('*')
+    .single()
 
-  if (error) {
+  if (error || !material) {
     logServerError('estoque_create_material_failed', error, {
       table: 'materiais',
       hasImage: Boolean(imagem_url),
     })
-    return { success: false, error: error.message }
+    return { success: false, error: error?.message || 'Erro ao cadastrar material' }
   }
 
   revalidatePath('/dashboard/estoque')
-  return { success: true }
+  revalidatePath('/dashboard/pedidos')
+  return { success: true, material: material as Material }
 }
 
 export async function updateMaterial(id: string, formData: FormData) {

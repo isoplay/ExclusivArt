@@ -98,7 +98,7 @@ export function GlobalSearch() {
       <Button
         type="button"
         variant="outline"
-        className="relative h-11 w-full max-w-[580px] justify-start rounded-full border-[#e6ddef] bg-white px-4 text-sm text-[#706b82] shadow-[0_8px_26px_rgba(83,48,122,0.06)] hover:bg-white sm:pr-16 lg:w-[580px]"
+        className="relative h-11 min-w-0 flex-1 justify-start rounded-full border-[#e6ddef] bg-white px-4 text-sm text-[#706b82] shadow-[0_8px_26px_rgba(83,48,122,0.06)] hover:bg-white sm:max-w-[580px] sm:pr-16 lg:w-[580px]"
         onClick={() => setOpen(true)}
       >
         <Search className="mr-2 h-4 w-4" />

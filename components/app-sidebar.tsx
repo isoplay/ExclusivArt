@@ -89,13 +89,16 @@ export function AppSidebar() {
   }
 
   return (
-    <Sidebar collapsible="icon" className="[&_[data-sidebar=sidebar]]:bg-[#c8adeb]">
-      <SidebarHeader className="border-b border-white/15 px-4 py-7">
+    <Sidebar
+      collapsible="icon"
+      className="[&_[data-sidebar=sidebar]]:overflow-hidden [&_[data-sidebar=sidebar]]:bg-[#c8adeb]"
+    >
+      <SidebarHeader className="border-b border-white/15 px-4 py-5 min-[900px]:py-7">
         <Link href="/dashboard" onClick={handleNavClick} className="flex items-center justify-center">
           <div
             className={cn(
               'relative drop-shadow-[0_12px_24px_rgba(80,48,122,0.16)] transition-all duration-200',
-              isCollapsed ? 'h-10 w-10' : 'h-28 w-28'
+              isCollapsed ? 'h-10 w-10' : 'h-20 w-20 min-[900px]:h-28 min-[900px]:w-28'
             )}
           >
             <div className="absolute inset-0">
@@ -111,7 +114,7 @@ export function AppSidebar() {
         </Link>
       </SidebarHeader>
 
-      <SidebarContent className="pt-6">
+      <SidebarContent className="pt-4 [scrollbar-width:none] min-[900px]:pt-6 [&::-webkit-scrollbar]:hidden">
         <SidebarGroup className="px-3">
           <SidebarGroupContent>
             <SidebarMenu className="gap-2">

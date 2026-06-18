@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog,
   DialogContent,
@@ -35,12 +34,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Plus, Copy, MoreHorizontal, Search, Eye, Send, Trash2, Clock } from 'lucide-react'
+import { Plus, Copy, MoreHorizontal, Search, Eye, Send, Trash2, Clock, Pencil } from 'lucide-react'
 import type { Material, PedidoComItens, StatusPedido } from '@/lib/types/database'
 import {
   deletePedido,
   gerarLinkAcompanhamentoPedido,
-  updatePedidoObservacaoCliente,
   updatePedidoStatus,
 } from './actions'
 import { PedidoForm } from './pedido-form'
@@ -107,8 +105,9 @@ export function PedidosContent({
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [isViewOpen, setIsViewOpen] = useState(false)
+  const [isEditOpen, setIsEditOpen] = useState(false)
   const [selectedPedido, setSelectedPedido] = useState<PedidoComItens | null>(null)
-  const [observacaoClienteEdit, setObservacaoClienteEdit] = useState('')
+  const [editingPedido, setEditingPedido] = useState<PedidoComItens | null>(null)
   const [trackingLink, setTrackingLink] = useState<string | null>(null)
   const [trackingWhatsAppUrl, setTrackingWhatsAppUrl] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
@@ -157,10 +156,15 @@ export function PedidosContent({
 
   function openView(pedido: PedidoComItens) {
     setSelectedPedido(pedido)
-    setObservacaoClienteEdit(pedido.observacao_cliente || '')
     setTrackingLink(null)
     setTrackingWhatsAppUrl(null)
     setIsViewOpen(true)
+  }
+
+  function openEdit(pedido: PedidoComItens) {
+    setEditingPedido(pedido)
+    setIsViewOpen(false)
+    setIsEditOpen(true)
   }
 
   async function copyTrackingLink(link: string) {
@@ -201,33 +205,58 @@ export function PedidosContent({
     })
   }
 
-  async function handleSaveObservacaoCliente() {
-    if (!selectedPedido) return
-
-    startTransition(async () => {
-      const result = await updatePedidoObservacaoCliente(
-        selectedPedido.id,
-        observacaoClienteEdit
-      )
-
-      if (result.success) {
-        toast.success('Observação para o cliente salva.')
-        setSelectedPedido({
-          ...selectedPedido,
-          observacao_cliente: observacaoClienteEdit.trim() || null,
-        })
-        router.refresh()
-      } else {
-        toast.error(result.error || 'Erro ao salvar observação')
-      }
-    })
+  function renderPedidoMenu(pedido: PedidoComItens) {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-9 w-9">
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={() => openView(pedido)}>
+            <Eye className="mr-2 h-4 w-4" />
+            Ver detalhes
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => openEdit(pedido)}>
+            <Pencil className="mr-2 h-4 w-4" />
+            Editar pedido
+          </DropdownMenuItem>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="w-full px-2 py-1.5 text-left text-sm hover:bg-muted">
+                Mudar Status
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="left" align="start">
+              {STATUS_OPTIONS.map((status) => (
+                <DropdownMenuItem
+                  key={status}
+                  onClick={() => handleStatusChange(pedido.id, status)}
+                  disabled={status === pedido.status}
+                >
+                  {status.replace(/_/g, ' ')}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <DropdownMenuItem
+            onClick={() => handleDelete(pedido.id)}
+            className="text-destructive"
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Excluir
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    )
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex min-w-0 flex-col gap-4 sm:gap-6">
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Pedidos</h1>
           <p className="text-muted-foreground">
             Gerencie pedidos de clientes
@@ -246,12 +275,12 @@ export function PedidosContent({
           }}
         >
           <DialogTrigger asChild>
-            <Button>
+            <Button className="w-full sm:w-auto">
               <Plus className="mr-2 h-4 w-4" />
               Novo Pedido
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-h-[92svh] overflow-y-auto sm:max-w-6xl">
+          <DialogContent className="!bottom-2 !left-2 !right-2 !top-2 max-h-none w-auto max-w-none !translate-x-0 !translate-y-0 overflow-y-auto bg-white p-4 sm:!bottom-auto sm:!left-[50%] sm:!right-auto sm:!top-[50%] sm:max-h-[92svh] sm:w-[calc(100vw-2rem)] sm:max-w-5xl sm:!translate-x-[-50%] sm:!translate-y-[-50%] sm:p-6 lg:w-[960px]">
             <DialogHeader>
               <DialogTitle>Criar Novo Pedido</DialogTitle>
               <DialogDescription>
@@ -271,16 +300,49 @@ export function PedidosContent({
             />
           </DialogContent>
         </Dialog>
+
+        <Dialog
+          open={isEditOpen}
+          onOpenChange={(open) => {
+            setIsEditOpen(open)
+            if (!open) setEditingPedido(null)
+          }}
+        >
+          <DialogContent className="!bottom-2 !left-2 !right-2 !top-2 max-h-none w-auto max-w-none !translate-x-0 !translate-y-0 overflow-y-auto bg-white p-4 sm:!bottom-auto sm:!left-[50%] sm:!right-auto sm:!top-[50%] sm:max-h-[92svh] sm:w-[calc(100vw-2rem)] sm:max-w-5xl sm:!translate-x-[-50%] sm:!translate-y-[-50%] sm:p-6 lg:w-[960px]">
+            <DialogHeader>
+              <DialogTitle>Editar Pedido</DialogTitle>
+              <DialogDescription>
+                Atualize dados, observacoes e componentes quando o estoque ainda nao foi baixado.
+              </DialogDescription>
+            </DialogHeader>
+            {editingPedido && (
+              <PedidoForm
+                mode="edit"
+                initialPedido={editingPedido}
+                categorias={categorias}
+                grupos={grupos}
+                componentes={componentes}
+                materiais={materiais}
+                maodeobra={maodeobra}
+                onSuccess={() => {
+                  setIsEditOpen(false)
+                  setEditingPedido(null)
+                  router.refresh()
+                }}
+              />
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
 
       {/* Filters */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-col gap-4 sm:flex-row">
+      <Card className="rounded-xl">
+        <CardContent className="p-4 sm:pt-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Buscar por cliente ou ID do pedido..."
+                placeholder="Buscar pedido ou cliente..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10"
@@ -306,7 +368,7 @@ export function PedidosContent({
       </Card>
 
       {/* Tabela de Pedidos */}
-      <Card>
+      <Card className="rounded-xl">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Clock className="h-5 w-5" />
@@ -334,7 +396,8 @@ export function PedidosContent({
               )}
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            <div className="hidden overflow-x-auto md:block">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -365,58 +428,61 @@ export function PedidosContent({
                       </TableCell>
                       <TableCell>{formatDate(pedido.prazo_entrega)}</TableCell>
                       <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-9 w-9">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => openView(pedido)}>
-                              <Eye className="mr-2 h-4 w-4" />
-                              Ver detalhes
-                            </DropdownMenuItem>
-                            {/* Submenu para status */}
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <button className="w-full text-left px-2 py-1.5 text-sm hover:bg-muted">
-                                  Mudar Status
-                                </button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent side="left" align="start">
-                                {STATUS_OPTIONS.map((s) => (
-                                  <DropdownMenuItem
-                                    key={s}
-                                    onClick={() => handleStatusChange(pedido.id, s)}
-                                    disabled={s === pedido.status}
-                                  >
-                                    {s.replace(/_/g, ' ')}
-                                  </DropdownMenuItem>
-                                ))}
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                            <DropdownMenuItem
-                              onClick={() => handleDelete(pedido.id)}
-                              className="text-destructive"
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Excluir
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        {renderPedidoMenu(pedido)}
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
             </div>
+            <div className="grid gap-3 md:hidden">
+              {filteredPedidos.map((pedido) => (
+                <article
+                  key={pedido.id}
+                  className="rounded-xl border border-[#E3DAF4] bg-white p-4 shadow-[0_10px_28px_-24px_rgba(83,48,122,0.28)]"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="truncate text-base font-semibold text-[#15142a]">
+                        {pedido.cliente_nome}
+                      </h3>
+                      <p className="mt-1 font-mono text-xs text-muted-foreground">
+                        {pedido.id.slice(0, 8)}...
+                      </p>
+                    </div>
+                    <div className="shrink-0">{renderPedidoMenu(pedido)}</div>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <Badge className={STATUS_COLORS[pedido.status] || 'bg-gray-100'}>
+                      {pedido.status.replace(/_/g, ' ')}
+                    </Badge>
+                    <span className="rounded-full bg-[#F5F3FA] px-3 py-1 text-xs font-medium text-[#5f5072]">
+                      {formatDate(pedido.prazo_entrega)}
+                    </span>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                    <div className="rounded-lg bg-[#F5F3FA]/70 p-3">
+                      <p className="text-xs text-muted-foreground">Total</p>
+                      <p className="mt-1 font-semibold">{formatCurrency(pedido.valor_total ?? 0)}</p>
+                    </div>
+                    <div className="rounded-lg bg-[#F5F3FA]/70 p-3">
+                      <p className="text-xs text-muted-foreground">Prazo</p>
+                      <p className="mt-1 font-semibold">{formatDate(pedido.prazo_entrega)}</p>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+            </>
           )}
         </CardContent>
       </Card>
 
       {/* Dialog: Ver Detalhes */}
       <Dialog open={isViewOpen} onOpenChange={setIsViewOpen}>
-        <DialogContent className="max-h-[92svh] max-w-lg overflow-y-auto">
+        <DialogContent className="!bottom-2 !left-2 !right-2 !top-2 max-h-none w-auto max-w-none !translate-x-0 !translate-y-0 overflow-y-auto bg-white p-4 sm:!bottom-auto sm:!left-[50%] sm:!right-auto sm:!top-[50%] sm:max-h-[92svh] sm:max-w-lg sm:!translate-x-[-50%] sm:!translate-y-[-50%] sm:p-6">
           <DialogHeader>
             <DialogTitle>Detalhes do Pedido</DialogTitle>
             <DialogDescription>
@@ -433,11 +499,15 @@ export function PedidosContent({
                 <p className="text-sm text-muted-foreground">Contato</p>
                 <p className="text-sm">{selectedPedido.cliente_contato || '-'}</p>
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Endereço</p>
-                <p className="text-sm">{selectedPedido.cliente_endereco || '-'}</p>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+              {selectedPedido.observacao_cliente && (
+                <div>
+                  <p className="text-sm text-muted-foreground">Observação do pedido</p>
+                  <p className="whitespace-pre-wrap text-sm leading-6 text-[#333333]">
+                    {selectedPedido.observacao_cliente}
+                  </p>
+                </div>
+              )}
+              <div className="grid grid-cols-1 gap-3 min-[380px]:grid-cols-2">
                 <div>
                   <p className="text-sm text-muted-foreground">Status</p>
                   <Badge className={STATUS_COLORS[selectedPedido.status]}>
@@ -460,36 +530,17 @@ export function PedidosContent({
                 </div>
               )}
 
-              <div className="rounded-2xl border border-[#E3DAF4] bg-white p-4">
-                <div className="mb-3">
-                  <p className="text-sm font-semibold text-[#333333]">
-                    Observação para o cliente
-                  </p>
-                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                    Aparece nos detalhes do pedido e no link público de acompanhamento.
-                  </p>
-                </div>
-                <Textarea
-                  value={observacaoClienteEdit}
-                  onChange={(event) => setObservacaoClienteEdit(event.target.value)}
-                  placeholder="Ex: Terço personalizado com o nome Kiliane, entremeio e crucifixo resinados"
-                  rows={4}
-                  maxLength={1200}
-                />
-                <div className="mt-3 flex justify-end">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleSaveObservacaoCliente}
-                    disabled={isPending}
-                  >
-                    {isPending ? 'Salvando...' : 'Salvar observação'}
-                  </Button>
-                </div>
-              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => openEdit(selectedPedido)}
+              >
+                <Pencil className="mr-2 h-4 w-4" />
+                Editar pedido
+              </Button>
 
-              <div className="rounded-2xl border border-[#E3DAF4] bg-[#F5F3FA] p-4">
+              <div className="rounded-xl border border-[#E3DAF4] bg-[#F5F3FA] p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-[#333333]">
@@ -520,7 +571,7 @@ export function PedidosContent({
                         type="button"
                         variant="outline"
                         size="sm"
-                        className="rounded-lg"
+                        className="w-full rounded-lg sm:w-auto"
                         onClick={() => copyTrackingLink(trackingLink)}
                       >
                         <Copy className="mr-2 h-3.5 w-3.5" />
@@ -531,7 +582,7 @@ export function PedidosContent({
                         <Button
                           type="button"
                           size="sm"
-                          className="rounded-lg"
+                          className="w-full rounded-lg sm:w-auto"
                           onClick={() => {
                             const opened = openExternalUrl(trackingWhatsAppUrl)
                             if (!opened) {

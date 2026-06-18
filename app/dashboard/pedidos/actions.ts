@@ -85,7 +85,13 @@ export async function getPedidos() {
         quantidade,
         valor_unitario,
         valor_total,
-        produto:produtos (*)
+        produto:produtos (*),
+        pedido_itens_materiais (
+          id,
+          material_id,
+          quantidade,
+          material:materiais (*)
+        )
       )
     `)
     .order('data_pedido', { ascending: false })
@@ -110,7 +116,13 @@ export async function getPedido(id: string) {
         quantidade,
         valor_unitario,
         valor_total,
-        produto:produtos (*)
+        produto:produtos (*),
+        pedido_itens_materiais (
+          id,
+          material_id,
+          quantidade,
+          material:materiais (*)
+        )
       )
     `)
     .eq('id', id)
@@ -922,6 +934,19 @@ export type PedidoItemMaterialInput = {
   quantidade: number
 }
 
+export type PedidoCustomizadoInput = {
+  cliente_nome: string
+  cliente_telefone: string | null
+  cliente_endereco: string | null
+  categoria_id: string
+  quantidade_itens: number
+  componentes: Array<{ material_id: string; quantidade: number }>
+  prazo_entrega: string
+  observacoes: string | null
+  observacao_cliente?: string | null
+  margem_percentual?: number
+}
+
 export async function addMateriaisAoPedidoItem(
   pedidoItemId: string,
   materiais: PedidoItemMaterialInput[]
@@ -975,18 +1000,21 @@ export async function getPedidoItemMateriais(pedidoItemId: string) {
 }
 
 // Nova função para criar pedido com componentes customizados
-export async function createPedidoCustomizado(params: {
-  cliente_nome: string
-  cliente_telefone: string | null
-  cliente_endereco: string | null
-  categoria_id: string
-  quantidade_itens: number
-  componentes: Array<{ material_id: string; quantidade: number }>
-  prazo_entrega: string
-  observacoes: string | null
-  observacao_cliente?: string | null
-  margem_percentual?: number
-}) {
+export async function getPedidoParaEdicao(id: string) {
+  if (!uuidRegex.test(id)) {
+    return { success: false, error: 'Pedido invalido' }
+  }
+
+  const pedido = await getPedido(id)
+
+  if (!pedido) {
+    return { success: false, error: 'Pedido nao encontrado' }
+  }
+
+  return { success: true, pedido }
+}
+
+export async function createPedidoCustomizado(params: PedidoCustomizadoInput) {
   const supabase = await createAuthenticatedClient()
 
   try {
@@ -1085,6 +1113,7 @@ export async function createPedidoCustomizado(params: {
       .insert({
         cliente_nome: params.cliente_nome,
         cliente_contato: params.cliente_telefone,
+        cliente_endereco: params.cliente_endereco,
         prazo_entrega: params.prazo_entrega,
         status: 'separando_materiais',
         prioridade: 1,
@@ -1146,6 +1175,217 @@ export async function createPedidoCustomizado(params: {
 }
 
 // Função para trazer dados necessários para o form de pedido
+export async function updatePedidoCustomizado(id: string, params: PedidoCustomizadoInput) {
+  if (!uuidRegex.test(id)) {
+    return { success: false, error: 'Pedido invalido' }
+  }
+
+  const supabase = await createAuthenticatedClient()
+
+  try {
+    const validationError = validatePedidoBasico(params.cliente_nome, params.prazo_entrega)
+
+    if (validationError) {
+      return { success: false, error: validationError }
+    }
+
+    const { data: pedidoAtual, error: pedidoAtualError } = await supabase
+      .from('pedidos')
+      .select('id, estoque_baixado')
+      .eq('id', id)
+      .maybeSingle()
+
+    if (pedidoAtualError || !pedidoAtual) {
+      return { success: false, error: 'Pedido nao encontrado' }
+    }
+
+    const dadosBasicos = {
+      cliente_nome: params.cliente_nome,
+      cliente_contato: params.cliente_telefone,
+      cliente_endereco: params.cliente_endereco,
+      prazo_entrega: params.prazo_entrega,
+      observacoes: params.observacoes,
+      observacao_cliente: cleanOptionalText(params.observacao_cliente),
+    }
+
+    if (pedidoAtual.estoque_baixado) {
+      const { error } = await supabase
+        .from('pedidos')
+        .update(dadosBasicos)
+        .eq('id', id)
+
+      if (error) {
+        return { success: false, error: error.message }
+      }
+
+      revalidatePath('/dashboard/pedidos')
+      revalidatePath('/dashboard')
+      revalidatePath('/p/[slug]', 'page')
+      revalidatePath('/acompanhar/[token]', 'page')
+      return { success: true, lockedMaterials: true }
+    }
+
+    const quantidadeItens = Math.max(1, params.quantidade_itens || 1)
+
+    if (quantidadeItens > 10000) {
+      return { success: false, error: 'Quantidade de itens invalida' }
+    }
+
+    const componentesSelecionados = params.componentes.filter(
+      (componente) =>
+        componente.material_id &&
+        Number.isFinite(componente.quantidade) &&
+        componente.quantidade > 0 &&
+        componente.quantidade <= 100000
+    )
+
+    if (componentesSelecionados.length === 0) {
+      return { success: false, error: 'Adicione pelo menos um componente ao pedido' }
+    }
+
+    const { data: maodeobra } = await supabase
+      .from('configuracao_maodeobra')
+      .select('valor_maodeobra')
+      .eq('categoria_id', params.categoria_id)
+      .maybeSingle()
+
+    const materialIds = componentesSelecionados.map((componente) => componente.material_id)
+
+    const { data: materiaisData, error: materiaisError } = await supabase
+      .from('materiais')
+      .select('id, nome, custo_unitario, quantidade, quantidade_atual')
+      .in('id', materialIds)
+
+    if (materiaisError || !materiaisData) {
+      return { success: false, error: 'Erro ao carregar materiais selecionados' }
+    }
+
+    const margemPercentual = Math.max(0, params.margem_percentual ?? 100)
+    let custoMateriaisTotal = 0
+    const faltantes: string[] = []
+
+    for (const componente of componentesSelecionados) {
+      const material = materiaisData.find((item) => item.id === componente.material_id)
+      if (!material) {
+        faltantes.push('Material nao encontrado')
+        continue
+      }
+
+      const quantidadeTotal = componente.quantidade * quantidadeItens
+      const estoqueAtual = material.quantidade_atual ?? material.quantidade ?? 0
+
+      if (estoqueAtual < quantidadeTotal) {
+        faltantes.push(`${material.nome}: estoque ${estoqueAtual}, necessario ${quantidadeTotal}`)
+      }
+
+      custoMateriaisTotal += (material.custo_unitario || 0) * quantidadeTotal
+    }
+
+    if (faltantes.length > 0) {
+      return {
+        success: false,
+        error: `Estoque insuficiente: ${faltantes.join(', ')}`,
+      }
+    }
+
+    const maodeobraTotal = (maodeobra?.valor_maodeobra || 0) * quantidadeItens
+    const custoBase = custoMateriaisTotal + maodeobraTotal
+    const valorComMargem = custoBase * (1 + margemPercentual / 100)
+    const valorTotal = arredondarParaCimaMeioReal(valorComMargem)
+
+    const produtoId = await resolveProdutoIdForCategoria(supabase, params.categoria_id)
+    if (!produtoId) {
+      return {
+        success: false,
+        error: 'Cadastre um produto antes de editar pedidos.',
+      }
+    }
+
+    const { error: pedidoError } = await supabase
+      .from('pedidos')
+      .update({
+        ...dadosBasicos,
+        valor_total: valorTotal,
+        tipo_produto_id: params.categoria_id,
+      })
+      .eq('id', id)
+
+    if (pedidoError) {
+      return { success: false, error: pedidoError.message }
+    }
+
+    const { data: itensAtuais, error: itensAtuaisError } = await supabase
+      .from('pedido_itens')
+      .select('id')
+      .eq('pedido_id', id)
+
+    if (itensAtuaisError) {
+      return { success: false, error: 'Erro ao carregar itens atuais do pedido' }
+    }
+
+    const itemIds = (itensAtuais || []).map((item) => item.id)
+
+    if (itemIds.length > 0) {
+      const { error: materiaisDeleteError } = await supabase
+        .from('pedido_itens_materiais')
+        .delete()
+        .in('pedido_item_id', itemIds)
+
+      if (materiaisDeleteError) {
+        return { success: false, error: 'Erro ao remover materiais antigos do pedido' }
+      }
+    }
+
+    const { error: itensDeleteError } = await supabase
+      .from('pedido_itens')
+      .delete()
+      .eq('pedido_id', id)
+
+    if (itensDeleteError) {
+      return { success: false, error: 'Erro ao remover itens antigos do pedido' }
+    }
+
+    const { data: pedidoItem, error: itemError } = await supabase
+      .from('pedido_itens')
+      .insert({
+        pedido_id: id,
+        produto_id: produtoId,
+        quantidade: quantidadeItens,
+        valor_unitario: valorTotal / quantidadeItens,
+      })
+      .select()
+      .single()
+
+    if (itemError || !pedidoItem) {
+      return { success: false, error: 'Erro ao recriar item do pedido' }
+    }
+
+    const materiais = componentesSelecionados.map((componente) => ({
+      pedido_item_id: pedidoItem.id,
+      material_id: componente.material_id,
+      quantidade: componente.quantidade * quantidadeItens,
+    }))
+
+    const { error: matError } = await supabase
+      .from('pedido_itens_materiais')
+      .insert(materiais)
+
+    if (matError) {
+      return { success: false, error: 'Erro ao salvar materiais do pedido' }
+    }
+
+    revalidatePath('/dashboard/pedidos')
+    revalidatePath('/dashboard')
+    revalidatePath('/dashboard/estoque')
+    revalidatePath('/p/[slug]', 'page')
+    revalidatePath('/acompanhar/[token]', 'page')
+    return { success: true, lockedMaterials: false }
+  } catch (error) {
+    console.error('Error updating customized order:', error)
+    return { success: false, error: 'Erro ao editar pedido customizado' }
+  }
+}
+
 export async function getCategoriasComComponentes() {
   const supabase = await createAuthenticatedClient()
 
