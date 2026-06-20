@@ -24,7 +24,7 @@ export default async function DashboardLayout({
       <SidebarInset>
         <div className="flex h-full flex-col">
           <header
-            className="sticky top-0 z-10 flex shrink-0 items-center gap-2 border-b border-[#eee6f5] bg-[#fbf8ff] px-3 md:gap-4 md:px-8"
+            className="dashboard-topbar sticky top-0 z-10 flex shrink-0 items-center gap-2 border-b border-[#eee6f5] px-3 md:gap-4 md:px-8"
             style={{ paddingTop: 'max(0px, env(safe-area-inset-top))', minHeight: '68px' }}
           >
             <SidebarTrigger className="-ml-1 h-10 w-10 rounded-full text-[#5f5072] hover:bg-[#f3edf8] md:hidden" />
@@ -55,7 +55,7 @@ export default async function DashboardLayout({
               </form>
             </div>
           </header>
-          <main className="flex-1 overflow-auto bg-[#fbf8ff] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] md:p-8 md:pb-[max(2rem,env(safe-area-inset-bottom))]">
+          <main className="dashboard-surface ui-enter flex-1 overflow-auto p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] md:p-8 md:pb-[max(2rem,env(safe-area-inset-bottom))]">
             {children}
           </main>
         </div>

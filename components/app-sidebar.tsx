@@ -126,19 +126,19 @@ export function AppSidebar() {
                 return (
                   <SidebarMenuItem key={item.title} className="px-0.5">
                     {isActive && (
-                      <span className="absolute right-3 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-[#9c6ed0]" />
+                      <span className="absolute right-3 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-[#9c6ed0] shadow-[0_0_0_5px_rgba(156,110,208,0.12)]" />
                     )}
                     <SidebarMenuButton
                       asChild
                       isActive={isActive}
                       tooltip={item.title}
                       className={cn(
-                        'h-11 rounded-2xl px-3 text-[#5f5072] transition-all duration-200 hover:bg-white/35 hover:text-[#4f4261]',
-                        isActive && 'bg-white/55 font-semibold text-[#4f4261] shadow-[0_12px_28px_rgba(80,48,122,0.12)]'
+                        'h-11 rounded-2xl px-3 text-[#5f5072] transition-all duration-200 ease-out hover:bg-white/40 hover:text-[#4f4261] hover:shadow-[0_10px_24px_-20px_rgba(80,48,122,0.38)] focus-visible:ring-2 focus-visible:ring-white/80 motion-reduce:transition-none',
+                        isActive && 'bg-white/60 font-semibold text-[#4f4261] shadow-[0_14px_30px_-22px_rgba(80,48,122,0.46)]'
                       )}
                     >
                       <Link href={item.url} onClick={handleNavClick}>
-                        <item.icon className={cn('h-5 w-5', isActive ? 'text-[#4f4261]' : 'text-[#5f5072]')} />
+                        <item.icon className={cn('h-5 w-5 transition-colors duration-200', isActive ? 'text-[#4f4261]' : 'text-[#5f5072]')} />
                         <span className="font-medium">{item.title}</span>
                       </Link>
                     </SidebarMenuButton>
