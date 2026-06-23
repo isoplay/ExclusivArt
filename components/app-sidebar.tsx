@@ -90,7 +90,7 @@ export function AppSidebar() {
 
   return (
     <Sidebar
-      collapsible="icon"
+      collapsible="offcanvas"
       className="[&_[data-sidebar=sidebar]]:overflow-hidden [&_[data-sidebar=sidebar]]:bg-[#c8adeb]"
     >
       <SidebarHeader className="border-b border-white/15 px-4 py-5 min-[900px]:py-7">

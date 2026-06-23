@@ -27,7 +27,11 @@ export default async function DashboardLayout({
             className="dashboard-topbar sticky top-0 z-10 flex shrink-0 items-center gap-2 border-b border-[#eee6f5] px-3 md:gap-4 md:px-8"
             style={{ paddingTop: 'max(0px, env(safe-area-inset-top))', minHeight: '68px' }}
           >
-            <SidebarTrigger className="-ml-1 h-10 w-10 rounded-full text-[#5f5072] hover:bg-[#f3edf8] md:hidden" />
+            <SidebarTrigger
+              aria-label="Mostrar ou esconder menu lateral"
+              title="Mostrar ou esconder menu lateral"
+              className="-ml-1 h-10 w-10 shrink-0 rounded-full text-[#5f5072] hover:bg-[#f3edf8]"
+            />
             <div className="relative h-9 w-9 shrink-0 md:hidden">
               <Image
                 src="/exclusiv-art-logo.png"
