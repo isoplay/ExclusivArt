@@ -267,7 +267,7 @@ export function FinanceiroContent({
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-green-800 flex items-center gap-2">
               <ArrowUpRight className="h-4 w-4" />
-              Receita Total
+              Receita Confirmada
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -301,7 +301,7 @@ export function FinanceiroContent({
           <CardHeader className="pb-2">
             <CardTitle className={`text-sm font-medium flex items-center gap-2 ${resumo.lucro >= 0 ? 'text-blue-800' : 'text-orange-800'}`}>
               <Wallet className="h-4 w-4" />
-              Lucro Liquido
+              Resultado do Mes
             </CardTitle>
           </CardHeader>
           <CardContent>

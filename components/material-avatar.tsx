@@ -1,4 +1,5 @@
 import { Box, Circle, Cross, Gem, Medal } from 'lucide-react'
+import { getCanonicalMaterialType } from '@/lib/material-types'
 import { cn } from '@/lib/utils'
 
 type MaterialAvatarProps = {
@@ -18,18 +19,7 @@ function normalizeKey(value: string | null | undefined) {
 }
 
 function isColorDrivenType(tipo?: string | null) {
-  const key = normalizeKey(tipo)
-
-  return [
-    'conta',
-    'contas',
-    'micanga',
-    'micangas',
-    'perola',
-    'perolas',
-    'cristal',
-    'cristais',
-  ].includes(key)
+  return getCanonicalMaterialType(tipo) === 'Contas'
 }
 
 function isValidHexColor(color?: string | null) {

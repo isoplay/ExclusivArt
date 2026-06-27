@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { parseDecimalInput } from '@/lib/number'
 import { createAuthenticatedClient } from '@/lib/auth'
+import { MATERIAL_TYPES } from '@/lib/material-types'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Produto, Material, ProdutoComMateriais } from '@/lib/types/database'
 
@@ -24,46 +25,18 @@ async function syncTiposComponentesForCategoria(
   supabase: SupabaseClient,
   categoriaId: string
 ) {
-  const tiposPadrao = ['Contas', 'Entremeio', 'Cruz', 'Letras']
-  const { data: todosGrupos } = await supabase
-    .from('grupos_componentes')
-    .select('nome, descricao, obrigatorio, permite_multipla_selecao, ordem, ativo')
-    .eq('ativo', true)
-
-  const tiposMap = new Map<
-    string,
-    {
-      nome: string
-      descricao: string | null
-      obrigatorio: boolean
-      permite_multipla_selecao: boolean
-      ordem: number
-    }
-  >()
-
-  ;(todosGrupos || []).forEach((grupo) => {
-    const key = normalizeKey(grupo.nome)
-    if (!key || tiposMap.has(key)) return
-    tiposMap.set(key, {
-      nome: grupo.nome,
-      descricao: grupo.descricao ?? null,
-      obrigatorio: grupo.obrigatorio ?? false,
-      permite_multipla_selecao: grupo.permite_multipla_selecao ?? false,
-      ordem: grupo.ordem ?? tiposMap.size + 1,
-    })
-  })
-
-  if (tiposMap.size === 0) {
-    tiposPadrao.forEach((nome, index) => {
-      tiposMap.set(normalizeKey(nome), {
-        nome,
+  const tiposMap = new Map(
+    MATERIAL_TYPES.map((tipo) => [
+      normalizeKey(tipo.nome),
+      {
+        nome: tipo.nome,
         descricao: null,
         obrigatorio: false,
         permite_multipla_selecao: false,
-        ordem: index + 1,
-      })
-    })
-  }
+        ordem: tipo.ordem,
+      },
+    ])
+  )
 
   const { data: gruposCategoria } = await supabase
     .from('grupos_componentes')
@@ -239,6 +212,7 @@ export async function getMateriais() {
   const { data, error } = await supabase
     .from('materiais')
     .select('*')
+    .eq('ativo', true)
     .order('nome')
 
   if (error) {
@@ -258,18 +232,26 @@ export async function calcularCustoProduto(
   const supabase = await createAuthenticatedClient()
   const detalhes: CustoProdutoCalculado['detalhes'] = []
   let custo_materiais = 0
+  const validItems = composicao.filter(
+    (item) => item.material_id && item.quantidade_usada > 0
+  )
+  const materialIds = Array.from(new Set(validItems.map((item) => item.material_id)))
+  const { data: materiais, error } = materialIds.length
+    ? await supabase
+        .from('materiais')
+        .select('id, nome, custo_unitario')
+        .in('id', materialIds)
+        .eq('ativo', true)
+    : { data: [], error: null }
 
-  for (const item of composicao) {
-    if (!item.material_id || item.quantidade_usada <= 0) continue
+  if (error) {
+    throw new Error('Erro ao carregar custos dos materiais')
+  }
 
-    const { data: material } = await supabase
-      .from('materiais')
-      .select('id, nome, custo_unitario')
-      .eq('id', item.material_id)
-      .single()
-
+  const materiaisPorId = new Map((materiais || []).map((material) => [material.id, material]))
+  for (const item of validItems) {
+    const material = materiaisPorId.get(item.material_id)
     if (!material) continue
-
     const custo_unitario = material.custo_unitario ?? 0
     const subtotal = custo_unitario * item.quantidade_usada
     custo_materiais += subtotal
@@ -309,21 +291,17 @@ async function saveComposicao(
   produtoId: string,
   composicao: ComposicaoInput[]
 ) {
-  await supabase.from('produto_materiais').delete().eq('produto_id', produtoId)
-
   const validItems = composicao.filter(
     (item) => item.material_id && item.quantidade_usada > 0
   )
 
-  if (validItems.length === 0) return
-
-  const { error } = await supabase.from('produto_materiais').insert(
-    validItems.map((item) => ({
-      produto_id: produtoId,
+  const { error } = await supabase.rpc('substituir_composicao_produto', {
+    p_produto_id: produtoId,
+    p_composicao: validItems.map((item) => ({
       material_id: item.material_id,
       quantidade_usada: item.quantidade_usada,
-    }))
-  )
+    })),
+  })
 
   if (error) {
     console.error('Error saving composition:', error)
@@ -393,7 +371,7 @@ export async function createProduto(
 export async function updateProduto(
   id: string,
   formData: FormData,
-  composicao: ComposicaoInput[] = []
+  composicao?: ComposicaoInput[]
 ) {
   const supabase = await createAuthenticatedClient()
 
@@ -426,12 +404,14 @@ export async function updateProduto(
     return { success: false, error: produtoError.message }
   }
 
-  try {
-    await saveComposicao(supabase, id, composicao)
-  } catch (err) {
-    return {
-      success: false,
-      error: err instanceof Error ? err.message : 'Erro ao salvar composicao',
+  if (composicao) {
+    try {
+      await saveComposicao(supabase, id, composicao)
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Erro ao salvar composicao',
+      }
     }
   }
 
@@ -504,10 +484,13 @@ export async function deleteProduto(id: string) {
     .eq('id', id)
     .maybeSingle()
 
-  const { error } = await supabase.from('produtos').delete().eq('id', id)
+  const { error } = await supabase
+    .from('produtos')
+    .update({ ativo: false })
+    .eq('id', id)
 
   if (error) {
-    console.error('Error deleting product:', error)
+    console.error('Error archiving product:', error)
     return { success: false, error: error.message }
   }
 

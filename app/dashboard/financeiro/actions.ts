@@ -17,12 +17,41 @@ const EMPTY_FINANCEIRO_RESUMO = {
   despesas: [],
 }
 
+const CATEGORIAS_DESPESA: CategoriaDespesa[] = [
+  'material',
+  'ferramenta',
+  'embalagem',
+  'frete',
+  'marketing',
+  'outro',
+]
+
+function isCategoriaDespesa(value: string): value is CategoriaDespesa {
+  return CATEGORIAS_DESPESA.includes(value as CategoriaDespesa)
+}
+
+function isValidDateInput(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const parsed = new Date(`${value}T00:00:00Z`)
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().startsWith(value)
+}
+
 function getMonthRange(mes: number, ano: number) {
   const startDate = `${ano}-${String(mes + 1).padStart(2, '0')}-01`
   const lastDay = new Date(ano, mes + 1, 0).getDate()
   const endDate = `${ano}-${String(mes + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
 
   return { startDate, endDate }
+}
+
+function getMonthTimestampRange(mes: number, ano: number) {
+  const nextMonth = mes === 11 ? 0 : mes + 1
+  const nextYear = mes === 11 ? ano + 1 : ano
+
+  return {
+    startIso: `${ano}-${String(mes + 1).padStart(2, '0')}-01T00:00:00-03:00`,
+    endExclusiveIso: `${nextYear}-${String(nextMonth + 1).padStart(2, '0')}-01T00:00:00-03:00`,
+  }
 }
 
 export async function getDespesas(mes?: number, ano?: number) {
@@ -55,12 +84,20 @@ export async function createDespesa(formData: FormData) {
 
   const descricao = formData.get('descricao') as string
   const valor = parseDecimalInput(formData.get('valor'))
-  const categoria = formData.get('categoria') as CategoriaDespesa
+  const categoriaInput = String(formData.get('categoria') ?? '')
   const data = formData.get('data') as string
 
-  if (!descricao.trim() || descricao.length > 160 || valor < 0 || valor > 1_000_000) {
+  if (
+    !descricao.trim() ||
+    descricao.length > 160 ||
+    valor < 0 ||
+    valor > 1_000_000 ||
+    !isCategoriaDespesa(categoriaInput) ||
+    !isValidDateInput(data)
+  ) {
     return { success: false, error: 'Dados da despesa invalidos' }
   }
+  const categoria = categoriaInput
 
   const { error } = await supabase.from('despesas').insert({
     descricao,
@@ -84,12 +121,20 @@ export async function updateDespesa(id: string, formData: FormData) {
 
   const descricao = formData.get('descricao') as string
   const valor = parseDecimalInput(formData.get('valor'))
-  const categoria = formData.get('categoria') as CategoriaDespesa
+  const categoriaInput = String(formData.get('categoria') ?? '')
   const data = formData.get('data') as string
 
-  if (!descricao.trim() || descricao.length > 160 || valor < 0 || valor > 1_000_000) {
+  if (
+    !descricao.trim() ||
+    descricao.length > 160 ||
+    valor < 0 ||
+    valor > 1_000_000 ||
+    !isCategoriaDespesa(categoriaInput) ||
+    !isValidDateInput(data)
+  ) {
     return { success: false, error: 'Dados da despesa invalidos' }
   }
+  const categoria = categoriaInput
 
   const { error } = await supabase
     .from('despesas')
@@ -129,16 +174,16 @@ export async function deleteDespesa(id: string) {
 export async function getFinanceiroResumo(mes: number, ano: number) {
   const supabase = await createAuthenticatedClient()
 
-  const startDate = new Date(ano, mes, 1).toISOString()
-  const endDate = new Date(ano, mes + 1, 0).toISOString()
+  const { startIso, endExclusiveIso } = getMonthTimestampRange(mes, ano)
   const { startDate: startDateOnly, endDate: endDateOnly } = getMonthRange(mes, ano)
 
   const results = await Promise.all([
     supabase
       .from('pedidos')
       .select('*')
-      .gte('data_pedido', startDate)
-      .lte('data_pedido', endDate),
+      .eq('ativo', true)
+      .gte('data_pedido', startIso)
+      .lt('data_pedido', endExclusiveIso),
     supabase
       .from('despesas')
       .select('*')
@@ -168,7 +213,7 @@ export async function getFinanceiroResumo(mes: number, ano: number) {
   }
 
   const receita = (pedidos || []).reduce((acc: number, p: Pedido) => {
-    if (p.status !== 'cancelado') {
+    if (p.status === 'pronto' || p.status === 'entregue') {
       return acc + p.valor_total
     }
     return acc

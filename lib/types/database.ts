@@ -2,6 +2,8 @@ export type Material = {
   id: string
   nome: string
   tipo: string | null
+  ativo: boolean
+  deleted_at?: string | null
   preco_compra: number
   quantidade: number
   quantidade_atual?: number
@@ -77,6 +79,8 @@ export type Pedido = {
   observacoes: string | null
   observacao_cliente?: string | null
   valor_total: number
+  ativo: boolean
+  deleted_at?: string | null
   estoque_baixado?: boolean
   tipo_produto_id?: string | null
   variacao_id?: string | null

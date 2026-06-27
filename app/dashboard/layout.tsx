@@ -5,9 +5,7 @@ import { PWAInstallPrompt } from '@/components/pwa-install-prompt'
 import { OfflineStatusIndicator } from '@/components/offline-status-indicator'
 import { GlobalSearch } from '@/components/global-search'
 import { FloatingActionButton } from '@/components/floating-action-button'
-import { Button } from '@/components/ui/button'
-import { logout } from '@/app/login/actions'
-import { LogOut } from 'lucide-react'
+import { LogoutForm } from '@/components/logout-form'
 import { getAuthenticatedUser, getUserDisplayName } from '@/lib/auth'
 
 export default async function DashboardLayout({
@@ -46,17 +44,7 @@ export default async function DashboardLayout({
                 <span>Olá,</span>
                 <strong className="font-semibold text-[#15142a]">{userName}</strong>
               </div>
-              <form action={logout}>
-                <Button
-                  type="submit"
-                  variant="ghost"
-                  size="sm"
-                  className="h-10 rounded-full px-3 text-[#5f5072] hover:bg-[#f3edf8] md:px-4"
-                >
-                  <LogOut className="h-4 w-4 md:mr-2" />
-                  <span className="hidden md:inline">Sair</span>
-                </Button>
-              </form>
+              <LogoutForm />
             </div>
           </header>
           <main className="dashboard-surface ui-enter flex-1 overflow-auto p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] md:p-8 md:pb-[max(2rem,env(safe-area-inset-bottom))]">

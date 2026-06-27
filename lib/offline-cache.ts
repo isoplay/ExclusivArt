@@ -69,6 +69,17 @@ export function saveOfflineSnapshot(partial: Partial<Pick<OfflineSnapshot, 'mate
   }
 }
 
+export function clearOfflineSnapshot() {
+  if (!isBrowser()) return
+
+  try {
+    window.localStorage.removeItem(SNAPSHOT_KEY)
+    window.dispatchEvent(new CustomEvent('exclusiv-art:offline-snapshot-updated'))
+  } catch {
+    // O logout continua mesmo quando o navegador bloqueia o storage.
+  }
+}
+
 export function formatSnapshotDate(value: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime()) || date.getFullYear() < 2020) return 'Ainda nao sincronizado'

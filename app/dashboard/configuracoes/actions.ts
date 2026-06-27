@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createAuthenticatedClient } from '@/lib/auth'
+import { getCanonicalMaterialType, MATERIAL_TYPES } from '@/lib/material-types'
 import { logServerError } from '@/lib/server-log'
 import type { TipoComponenteConfig } from '@/lib/types/database'
 
@@ -55,6 +56,7 @@ export async function getTiposComponentesConfig(): Promise<TipoComponenteConfig[
     const { data: materiais, error: materiaisError } = await supabase
       .from('materiais')
       .select('id, tipo')
+      .eq('ativo', true)
 
     if (materiaisError) {
       logServerError('config_get_material_types_failed', materiaisError, {
@@ -64,17 +66,30 @@ export async function getTiposComponentesConfig(): Promise<TipoComponenteConfig[
 
     const materialCount = new Map<string, number>()
     ;(materiais || []).forEach((material) => {
-      const key = normalizeKey(material.tipo)
-      if (!key) return
-      materialCount.set(key, (materialCount.get(key) || 0) + 1)
+      const tipo = getCanonicalMaterialType(material.tipo)
+      if (!tipo) return
+      materialCount.set(tipo, (materialCount.get(tipo) || 0) + 1)
     })
 
-    const grouped = new Map<string, TipoComponenteConfig>()
+    const grouped = new Map<string, TipoComponenteConfig>(
+      MATERIAL_TYPES.map((tipo) => [
+        normalizeKey(tipo.nome),
+        {
+          nome: tipo.nome,
+          ativo: false,
+          total_grupos: 0,
+          categorias: [],
+          materiais_vinculados: materialCount.get(tipo.nome) || 0,
+          ordem: tipo.ordem,
+        },
+      ])
+    )
 
     ;(grupos || []).forEach((grupo: any) => {
-      const nome = normalizeText(grupo.nome)
+      const nome = getCanonicalMaterialType(grupo.nome)
+      if (!nome) return
+
       const key = normalizeKey(nome)
-      if (!key) return
 
       const categoria = Array.isArray(grupo.categoria) ? grupo.categoria[0] : grupo.categoria
       if (categoria?.ativo === false) return
@@ -86,7 +101,7 @@ export async function getTiposComponentesConfig(): Promise<TipoComponenteConfig[
           ativo: false,
           total_grupos: 0,
           categorias: [] as string[],
-          materiais_vinculados: materialCount.get(key) || 0,
+          materiais_vinculados: materialCount.get(nome) || 0,
           ordem: grupo.ordem ?? 999,
         } satisfies TipoComponenteConfig)
 
@@ -115,10 +130,10 @@ export async function getTiposComponentesConfig(): Promise<TipoComponenteConfig[
 
 export async function criarTipoComponente(formData: FormData) {
   const supabase = await createAuthenticatedClient()
-  const nome = normalizeText(formData.get('nome') as string)
+  const nome = getCanonicalMaterialType(formData.get('nome') as string)
 
   if (!nome) {
-    return { success: false, error: 'Informe o nome do tipo de componente' }
+    return { success: false, error: 'Use um dos seis tipos padronizados' }
   }
 
   const { data: categorias, error: categoriasError } = await supabase
@@ -187,45 +202,31 @@ export async function criarTipoComponente(formData: FormData) {
 }
 
 export async function renomearTipoComponente(nomeAtual: string, formData: FormData) {
-  const supabase = await createAuthenticatedClient()
-  const nome = normalizeText(formData.get('nome') as string)
-  const atual = normalizeText(nomeAtual)
+  const nome = getCanonicalMaterialType(formData.get('nome') as string)
+  const atual = getCanonicalMaterialType(nomeAtual)
 
-  if (!nome) {
-    return { success: false, error: 'Informe o novo nome do tipo' }
+  if (!nome || !atual) {
+    return { success: false, error: 'Use um dos seis tipos padronizados' }
   }
 
-  if (normalizeKey(nome) === normalizeKey(atual)) {
+  if (nome === atual) {
     return { success: true }
   }
 
-  const { error: gruposError } = await supabase
-    .from('grupos_componentes')
-    .update({ nome })
-    .eq('nome', atual)
-
-  if (gruposError) {
-    console.error('Error renaming component type:', gruposError)
-    return { success: false, error: gruposError.message }
-  }
-
-  const { error: materiaisError } = await supabase
-    .from('materiais')
-    .update({ tipo: nome })
-    .eq('tipo', atual)
-
-  if (materiaisError) {
-    console.error('Error updating material component type:', materiaisError)
-    return { success: false, error: materiaisError.message }
-  }
-
-  revalidateConfiguracoesDependentes()
-  return { success: true }
+  return { success: false, error: 'Os tipos padronizados não podem ser renomeados' }
 }
 
 export async function alternarTipoComponente(nome: string, ativo: boolean) {
   const supabase = await createAuthenticatedClient()
-  const tipo = normalizeText(nome)
+  const tipo = getCanonicalMaterialType(nome)
+
+  if (!tipo) {
+    return { success: false, error: 'Tipo de componente inválido' }
+  }
+
+  if (!ativo) {
+    return { success: false, error: 'Os seis tipos padronizados devem permanecer ativos' }
+  }
 
   const { error } = await supabase
     .from('grupos_componentes')

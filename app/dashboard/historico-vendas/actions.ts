@@ -297,6 +297,7 @@ export async function getHistoricoVendas(filters: HistoricoVendasFilters = {}) {
           )
         `
       )
+      .eq('ativo', true)
       .in('status', PEDIDOS_HISTORICO_STATUS)
       .order('data_pedido', { ascending })
 

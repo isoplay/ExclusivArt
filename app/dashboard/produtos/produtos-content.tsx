@@ -126,7 +126,7 @@ export function ProdutosContent({ produtos }: { produtos: ProdutoComMateriais[] 
     formData.set('ativo', String(selectedProduto.ativo))
 
     startTransition(async () => {
-      const result = await updateProduto(selectedProduto.id, formData, [])
+      const result = await updateProduto(selectedProduto.id, formData)
       if (result.success) {
         toast.success('Produto atualizado com sucesso!')
         setIsEditOpen(false)

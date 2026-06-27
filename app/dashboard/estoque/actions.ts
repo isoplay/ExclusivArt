@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { areDecimalValuesClose, parseDecimalInput, roundCurrency } from '@/lib/number'
 import { createAuthenticatedClient } from '@/lib/auth'
+import { getCanonicalMaterialType } from '@/lib/material-types'
 import { logServerError } from '@/lib/server-log'
 import type { Material, TipoMovimentacao } from '@/lib/types/database'
 
@@ -133,6 +134,7 @@ export async function getMateriais() {
     const { data, error } = await supabase
       .from('materiais')
       .select('*')
+      .eq('ativo', true)
       .order('nome')
 
     if (error) {
@@ -228,7 +230,7 @@ export async function createMaterial(formData: FormData) {
   const supabase = await createAuthenticatedClient()
 
   const nome = formData.get('nome') as string
-  const tipo = formData.get('tipo') as string
+  const tipo = getCanonicalMaterialType(formData.get('tipo') as string)
   const unidade = formData.get('unidade') as string
   const cor = formData.get('cor') as string
   const quantidade = parseDecimalInput(formData.get('quantidade'))
@@ -237,7 +239,9 @@ export async function createMaterial(formData: FormData) {
   const preco_compra_input = parseDecimalInput(formData.get('preco_compra'))
   const imagem = formData.get('imagem') as File | null
   const imagemUrlResult = getSafeImageUrl(formData.get('imagem_url'))
-  const validationError = validateMaterialFields(nome, tipo, quantidade, custo_unitario_input)
+  const validationError = tipo
+    ? validateMaterialFields(nome, tipo, quantidade, custo_unitario_input)
+    : 'Tipo de componente invalido'
 
   if (validationError) {
     return { success: false, error: validationError }
@@ -303,13 +307,14 @@ export async function createMaterial(formData: FormData) {
   return { success: true, material: material as Material }
 }
 
-export async function updateMaterial(id: string, formData: FormData) {
+export async function updateMaterial(materialId: string, formData: FormData) {
   const supabase = await createAuthenticatedClient()
 
   const nome = formData.get('nome') as string
-  const tipo = formData.get('tipo') as string
+  const tipo = getCanonicalMaterialType(formData.get('tipo') as string)
   const unidade = formData.get('unidade') as string
   const cor = formData.get('cor') as string
+  const novaQuantidadeAtual = parseDecimalInput(formData.get('quantidade_atual'))
   const quantidade_minima = parseDecimalInput(formData.get('quantidade_minima')) || 30
   const custo_unitario_input = parseDecimalInput(formData.get('custo_unitario'))
   const preco_compra_input = parseDecimalInput(formData.get('preco_compra'))
@@ -323,7 +328,7 @@ export async function updateMaterial(id: string, formData: FormData) {
   const { data: materialAtual, error: materialAtualError } = await supabase
     .from('materiais')
     .select('preco_compra, quantidade, quantidade_atual, custo_unitario')
-    .eq('id', id)
+    .eq('id', materialId)
     .single()
 
   if (materialAtualError || !materialAtual) {
@@ -354,10 +359,16 @@ export async function updateMaterial(id: string, formData: FormData) {
   const quantidadeBase = quantidadeBaseAtual > 0 ? quantidadeBaseAtual : estoqueAtual
   const custoUnitarioAtual = toFiniteNumber(materialAtual.custo_unitario)
   const precoCompraAtual = roundCurrency(toFiniteNumber(materialAtual.preco_compra))
-  const validationError = validateMaterialFields(nome, tipo, quantidadeBase, custo_unitario_input)
+  const validationError = tipo
+    ? validateMaterialFields(nome, tipo, quantidadeBase, custo_unitario_input)
+    : 'Tipo de componente invalido'
 
   if (validationError) {
     return { success: false, error: validationError }
+  }
+
+  if (novaQuantidadeAtual < 0 || novaQuantidadeAtual > 1_000_000) {
+    return { success: false, error: 'Estoque atual invalido' }
   }
 
   const custoUnitarioAlterado =
@@ -370,29 +381,21 @@ export async function updateMaterial(id: string, formData: FormData) {
       ? roundCurrency(preco_compra_input)
       : precoCompraAtual
 
-  const updateData: Record<string, unknown> = {
-    nome,
-    tipo,
-    unidade,
-    cor,
-    quantidade: quantidadeBase,
-    quantidade_minima,
-    preco_compra,
-  }
-
-  if (imagem_url) {
-    updateData.imagem_url = imagem_url
-  } else {
-    updateData.imagem_url = null
-  }
-
-  const { error } = await supabase
-    .from('materiais')
-    .update(updateData)
-    .eq('id', id)
+  const { error } = await supabase.rpc('atualizar_material_com_estoque', {
+    p_material_id: materialId,
+    p_nome: nome,
+    p_tipo: tipo,
+    p_unidade: unidade,
+    p_cor: cor,
+    p_quantidade_base: quantidadeBase,
+    p_quantidade_minima: quantidade_minima,
+    p_preco_compra: preco_compra,
+    p_imagem_url: imagem_url,
+    p_nova_quantidade: novaQuantidadeAtual,
+  })
 
   if (error) {
-    logServerError('estoque_update_material_failed', error, {
+    logServerError('estoque_update_material_atomic_failed', error, {
       table: 'materiais',
       hasImage: Boolean(imagem_url),
     })
@@ -400,16 +403,16 @@ export async function updateMaterial(id: string, formData: FormData) {
   }
 
   revalidatePath('/dashboard/estoque')
+  revalidatePath('/dashboard')
   return { success: true }
 }
 
-export async function deleteMaterial(id: string) {
+export async function deleteMaterial(materialId: string) {
   const supabase = await createAuthenticatedClient()
 
-  const { error } = await supabase
-    .from('materiais')
-    .delete()
-    .eq('id', id)
+  const { data: action, error } = await supabase.rpc('excluir_ou_arquivar_material', {
+    p_material_id: materialId,
+  })
 
   if (error) {
     logServerError('estoque_delete_material_failed', error, { table: 'materiais' })
@@ -417,7 +420,14 @@ export async function deleteMaterial(id: string) {
   }
 
   revalidatePath('/dashboard/estoque')
-  return { success: true }
+  revalidatePath('/dashboard/produtos')
+  revalidatePath('/dashboard/pedidos')
+  revalidatePath('/dashboard/operacao')
+  revalidatePath('/dashboard')
+  return {
+    success: true,
+    action: action === 'arquivado' ? ('arquivado' as const) : ('excluido' as const),
+  }
 }
 
 export async function registrarMovimentacao(
@@ -428,51 +438,19 @@ export async function registrarMovimentacao(
 ) {
   const supabase = await createAuthenticatedClient()
 
-  const { data: material, error: fetchError } = await supabase
-    .from('materiais')
-    .select('quantidade, quantidade_atual')
-    .eq('id', materialId)
-    .single()
-
-  if (fetchError || !material) {
-    return { success: false, error: 'Material nao encontrado' }
-  }
-
-  const estoqueAtual =
-    material.quantidade_atual ?? material.quantidade ?? 0
-  let novaQuantidade = estoqueAtual
-  if (tipo === 'entrada') {
-    novaQuantidade += quantidade
-  } else if (tipo === 'saida') {
-    novaQuantidade -= quantidade
-    if (novaQuantidade < 0) {
-      return { success: false, error: 'Quantidade insuficiente em estoque' }
-    }
-  }
-
-  const { error: movError } = await supabase.from('movimentacoes_estoque').insert({
-    material_id: materialId,
-    tipo,
-    quantidade,
-    motivo: motivo || null,
+  const { error } = await supabase.rpc('registrar_movimentacao_material', {
+    p_material_id: materialId,
+    p_tipo: tipo,
+    p_quantidade: quantidade,
+    p_motivo: motivo || null,
   })
 
-  if (movError) {
-    logServerError('estoque_registrar_movimentacao_failed', movError, {
+  if (error) {
+    logServerError('estoque_registrar_movimentacao_failed', error, {
       table: 'movimentacoes_estoque',
       tipo,
     })
-    return { success: false, error: movError.message }
-  }
-
-  const { error: updateError } = await supabase
-    .from('materiais')
-    .update({ quantidade_atual: novaQuantidade })
-    .eq('id', materialId)
-
-  if (updateError) {
-    logServerError('estoque_update_quantidade_failed', updateError, { table: 'materiais' })
-    return { success: false, error: updateError.message }
+    return { success: false, error: error.message }
   }
 
   revalidatePath('/dashboard/estoque')

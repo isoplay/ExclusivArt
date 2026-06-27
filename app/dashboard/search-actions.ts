@@ -25,12 +25,14 @@ export async function searchGlobal(query: string): Promise<SearchResult> {
       .from('pedidos')
       .select('id, cliente_nome, status, valor_total')
       .or(`cliente_nome.ilike.${searchTerm},cliente_contato.ilike.${searchTerm}`)
+      .eq('ativo', true)
       .limit(5),
 
     supabase
       .from('materiais')
       .select('id, nome, quantidade, unidade')
       .ilike('nome', searchTerm)
+      .eq('ativo', true)
       .limit(5),
   ])
 

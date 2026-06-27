@@ -94,6 +94,7 @@ export async function getPedidos() {
         )
       )
     `)
+    .eq('ativo', true)
     .order('data_pedido', { ascending: false })
 
   if (error) {
@@ -126,6 +127,7 @@ export async function getPedido(id: string) {
       )
     `)
     .eq('id', id)
+    .eq('ativo', true)
     .single()
 
   if (error) {
@@ -159,6 +161,7 @@ export async function getMateriaisDisponiveis() {
   const { data, error } = await supabase
     .from('materiais')
     .select('*')
+    .eq('ativo', true)
     .order('nome')
 
   if (error) {
@@ -174,6 +177,25 @@ export type ItemInput = {
   quantidade: number
   valor_unitario: number
   materiais?: PedidoItemMaterialInput[]
+}
+
+async function buildAtomicPedidoItems(
+  supabase: SupabaseClient,
+  itens: ItemInput[]
+) {
+  return Promise.all(
+    itens.map(async (item) => ({
+      produto_id: item.produto_id,
+      quantidade: item.quantidade,
+      valor_unitario: item.valor_unitario,
+      materiais: await resolveItemMateriais(
+        supabase,
+        item.produto_id,
+        item.quantidade,
+        item.materiais
+      ),
+    }))
+  )
 }
 
 const statusPermitidos: StatusPedido[] = [
@@ -213,6 +235,7 @@ async function ensureTrackingSlug(
     .from('pedidos')
     .select('slug_acompanhamento')
     .eq('id', pedidoId)
+    .eq('ativo', true)
     .maybeSingle()
 
   if (current?.slug_acompanhamento) {
@@ -234,6 +257,7 @@ async function ensureTrackingSlug(
       .from('pedidos')
       .update({ slug_acompanhamento: slug })
       .eq('id', pedidoId)
+      .eq('ativo', true)
 
     if (!error) {
       return slug
@@ -246,6 +270,7 @@ async function ensureTrackingSlug(
     .from('pedidos')
     .update({ slug_acompanhamento: fallback })
     .eq('id', pedidoId)
+    .eq('ativo', true)
   // Intentionally ignore errors on fallback slug persistence (extremely rare)
   return fallback
 }
@@ -343,68 +368,28 @@ export async function createPedido(
     return { success: false, error: 'Itens do pedido invalidos' }
   }
 
-  const valor_total = itens.reduce((acc, item) => acc + item.valor_unitario * item.quantidade, 0)
-
-  const { data: pedido, error: pedidoError } = await supabase
-    .from('pedidos')
-    .insert({
+  const itensAtomicos = await buildAtomicPedidoItems(supabase, itens)
+  const { data: pedidoId, error } = await supabase.rpc('criar_pedido_atomico', {
+    p_pedido: {
       cliente_nome,
       cliente_contato: cliente_contato || null,
       prazo_entrega: prazo_entrega || null,
-      data_pedido: new Date().toISOString(),
       status: 'orcamento',
       prioridade,
-      valor_total,
       observacoes: observacoes || null,
       observacao_cliente,
-    })
-    .select()
-    .single()
+    },
+    p_itens: itensAtomicos,
+  })
 
-  if (pedidoError || !pedido) {
-    console.error('Error creating order:', pedidoError)
-    return { success: false, error: pedidoError?.message || 'Erro ao criar pedido' }
-  }
-
-  if (itens.length > 0) {
-    const itensToInsert = itens.map(item => ({
-      pedido_id: pedido.id,
-      produto_id: item.produto_id,
-      quantidade: item.quantidade,
-      valor_unitario: item.valor_unitario,
-    }))
-
-    const { data: insertedItens, error: itensError } = await supabase
-      .from('pedido_itens')
-      .insert(itensToInsert)
-      .select('id')
-
-    if (itensError || !insertedItens) {
-      console.error('Error adding items:', itensError)
-      await supabase.from('pedidos').delete().eq('id', pedido.id)
-      return { success: false, error: 'Erro ao adicionar itens' }
-    }
-
-    for (let i = 0; i < itens.length; i++) {
-      const item = itens[i]
-      const materiais = await resolveItemMateriais(
-        supabase,
-        item.produto_id,
-        item.quantidade,
-        item.materiais
-      )
-      if (materiais.length && insertedItens[i]) {
-        const matResult = await addMateriaisAoPedidoItem(insertedItens[i].id, materiais)
-        if (!matResult.success) {
-          console.error('Error adding item materials:', matResult.error)
-        }
-      }
-    }
+  if (error || !pedidoId) {
+    logServerError('pedidos_create_atomic_failed', error, { table: 'pedidos' })
+    return { success: false, error: error?.message || 'Erro ao criar pedido' }
   }
 
   revalidatePath('/dashboard/pedidos')
   revalidatePath('/dashboard')
-  return { success: true, pedidoId: pedido.id }
+  return { success: true, pedidoId }
 }
 
 export async function updatePedido(
@@ -430,69 +415,28 @@ export async function updatePedido(
     return { success: false, error: 'Itens do pedido invalidos' }
   }
 
-  // Calculate total
-  const valor_total = itens.reduce((acc, item) => acc + item.valor_unitario * item.quantidade, 0)
-
-  // Update order
-  const { error: pedidoError } = await supabase
-    .from('pedidos')
-    .update({
+  const itensAtomicos = await buildAtomicPedidoItems(supabase, itens)
+  const { data: action, error } = await supabase.rpc('atualizar_pedido_atomico', {
+    p_pedido_id: id,
+    p_pedido: {
       cliente_nome,
       cliente_contato: cliente_contato || null,
       prazo_entrega: prazo_entrega || null,
       prioridade,
-      valor_total,
       observacoes: observacoes || null,
       observacao_cliente,
-    })
-    .eq('id', id)
+    },
+    p_itens: itensAtomicos,
+  })
 
-  if (pedidoError) {
-    console.error('Error updating order:', pedidoError)
-    return { success: false, error: pedidoError.message }
-  }
-
-  // Delete existing items and re-insert
-  await supabase.from('pedido_itens').delete().eq('pedido_id', id)
-
-  if (itens.length > 0) {
-    const itensToInsert = itens.map(item => ({
-      pedido_id: id,
-      produto_id: item.produto_id,
-      quantidade: item.quantidade,
-      valor_unitario: item.valor_unitario,
-    }))
-
-    const { data: insertedItens, error: itensError } = await supabase
-      .from('pedido_itens')
-      .insert(itensToInsert)
-      .select('id')
-
-    if (itensError || !insertedItens) {
-      console.error('Error updating items:', itensError)
-      return { success: false, error: 'Erro ao atualizar itens' }
-    }
-
-    for (let i = 0; i < itens.length; i++) {
-      const item = itens[i]
-      const materiais = await resolveItemMateriais(
-        supabase,
-        item.produto_id,
-        item.quantidade,
-        item.materiais
-      )
-      if (materiais.length && insertedItens[i]) {
-        const matResult = await addMateriaisAoPedidoItem(insertedItens[i].id, materiais)
-        if (!matResult.success) {
-          console.error('Error updating item materials:', matResult.error)
-        }
-      }
-    }
+  if (error) {
+    logServerError('pedidos_update_atomic_failed', error, { table: 'pedidos' })
+    return { success: false, error: error.message }
   }
 
   revalidatePath('/dashboard/pedidos')
   revalidatePath('/dashboard')
-  return { success: true }
+  return { success: true, lockedMaterials: action === 'materiais_bloqueados' }
 }
 
 export async function updatePedidoObservacaoCliente(
@@ -510,6 +454,7 @@ export async function updatePedidoObservacaoCliente(
     .from('pedidos')
     .update({ observacao_cliente })
     .eq('id', id)
+    .eq('ativo', true)
 
   if (error) {
     console.error('Error updating customer note:', error)
@@ -534,6 +479,7 @@ export async function updatePedidoStatus(id: string, status: StatusPedido) {
     .from('pedidos')
     .update({ status })
     .eq('id', id)
+    .eq('ativo', true)
 
   if (error) {
     console.error('Error updating status:', error)
@@ -559,6 +505,7 @@ export async function gerarLinkAcompanhamentoPedido(
     .from('pedidos')
     .select('id, cliente_nome, cliente_contato')
     .eq('id', pedidoId)
+    .eq('ativo', true)
     .maybeSingle()
 
   if (pedidoError || !pedido) {
@@ -751,17 +698,12 @@ export async function getMateriaisBaixaPedido(
 export async function deletePedido(id: string) {
   const supabase = await createAuthenticatedClient()
 
-  // First delete items
-  await supabase.from('pedido_itens').delete().eq('pedido_id', id)
-
-  // Then delete order
-  const { error } = await supabase
-    .from('pedidos')
-    .delete()
-    .eq('id', id)
+  const { error } = await supabase.rpc('arquivar_pedido', {
+    p_pedido_id: id,
+  })
 
   if (error) {
-    console.error('Error deleting order:', error)
+    logServerError('pedidos_archive_failed', error, { table: 'pedidos' })
     return { success: false, error: error.message }
   }
 
@@ -953,26 +895,10 @@ export async function addMateriaisAoPedidoItem(
 ) {
   const supabase = await createAuthenticatedClient()
 
-  // Remove existing materials first
-  await supabase
-    .from('pedido_itens_materiais')
-    .delete()
-    .eq('pedido_item_id', pedidoItemId)
-
-  if (materiais.length === 0) {
-    return { success: true }
-  }
-
-  // Insert new materials
-  const materiaisToInsert = materiais.map(m => ({
-    pedido_item_id: pedidoItemId,
-    material_id: m.material_id,
-    quantidade: m.quantidade,
-  }))
-
-  const { error } = await supabase
-    .from('pedido_itens_materiais')
-    .insert(materiaisToInsert)
+  const { error } = await supabase.rpc('substituir_materiais_pedido_item', {
+    p_pedido_item_id: pedidoItemId,
+    p_materiais: materiais,
+  })
 
   if (error) {
     console.error('Error adding materials to order item:', error)
@@ -1054,6 +980,7 @@ export async function createPedidoCustomizado(params: PedidoCustomizadoInput) {
       .from('materiais')
       .select('id, nome, custo_unitario, quantidade, quantidade_atual')
       .in('id', materialIds)
+      .eq('ativo', true)
 
     if (materiaisError || !materiaisData) {
       console.error('Error fetching selected materials:', materiaisError)
@@ -1108,9 +1035,8 @@ export async function createPedidoCustomizado(params: PedidoCustomizadoInput) {
       }
     }
 
-    const { data: pedido, error: pedidoError } = await supabase
-      .from('pedidos')
-      .insert({
+    const { data: pedidoId, error: pedidoError } = await supabase.rpc('criar_pedido_atomico', {
+      p_pedido: {
         cliente_nome: params.cliente_nome,
         cliente_contato: params.cliente_telefone,
         cliente_endereco: params.cliente_endereco,
@@ -1121,53 +1047,31 @@ export async function createPedidoCustomizado(params: PedidoCustomizadoInput) {
         observacoes: params.observacoes,
         observacao_cliente: cleanOptionalText(params.observacao_cliente),
         tipo_produto_id: params.categoria_id,
-      })
-      .select()
-      .single()
+      },
+      p_itens: [
+        {
+          produto_id: produtoId,
+          quantidade: quantidadeItens,
+          valor_unitario: valorTotal / quantidadeItens,
+          materiais: componentesSelecionados.map((componente) => ({
+            material_id: componente.material_id,
+            quantidade: componente.quantidade * quantidadeItens,
+          })),
+        },
+      ],
+    })
 
-    if (pedidoError || !pedido) {
-      console.error('Error creating order:', pedidoError)
+    if (pedidoError || !pedidoId) {
+      logServerError('pedidos_create_custom_atomic_failed', pedidoError, {
+        table: 'pedidos',
+      })
       return { success: false, error: pedidoError?.message || 'Erro ao criar pedido' }
-    }
-
-    const { data: pedidoItem, error: itemError } = await supabase
-      .from('pedido_itens')
-      .insert({
-        pedido_id: pedido.id,
-        produto_id: produtoId,
-        quantidade: quantidadeItens,
-        valor_unitario: valorTotal / quantidadeItens,
-      })
-      .select()
-      .single()
-
-    if (itemError || !pedidoItem) {
-      console.error('Error creating order item:', itemError)
-      await supabase.from('pedidos').delete().eq('id', pedido.id)
-      return { success: false, error: 'Erro ao adicionar item' }
-    }
-
-    const materiais = componentesSelecionados.map((c) => ({
-      pedido_item_id: pedidoItem.id,
-      material_id: c.material_id,
-      quantidade: c.quantidade * quantidadeItens,
-    }))
-
-    const { error: matError } = await supabase
-      .from('pedido_itens_materiais')
-      .insert(materiais)
-
-    if (matError) {
-      console.error('Error adding materials:', matError)
-      await supabase.from('pedido_itens').delete().eq('id', pedidoItem.id)
-      await supabase.from('pedidos').delete().eq('id', pedido.id)
-      return { success: false, error: 'Erro ao adicionar materiais' }
     }
 
     revalidatePath('/dashboard/pedidos')
     revalidatePath('/dashboard')
     revalidatePath('/dashboard/estoque')
-    return { success: true, pedidoId: pedido.id }
+    return { success: true, pedidoId }
   } catch (error) {
     console.error('Error creating customized order:', error)
     return { success: false, error: 'Erro ao criar pedido customizado' }
@@ -1193,6 +1097,7 @@ export async function updatePedidoCustomizado(id: string, params: PedidoCustomiz
       .from('pedidos')
       .select('id, estoque_baixado')
       .eq('id', id)
+      .eq('ativo', true)
       .maybeSingle()
 
     if (pedidoAtualError || !pedidoAtual) {
@@ -1213,6 +1118,7 @@ export async function updatePedidoCustomizado(id: string, params: PedidoCustomiz
         .from('pedidos')
         .update(dadosBasicos)
         .eq('id', id)
+        .eq('ativo', true)
 
       if (error) {
         return { success: false, error: error.message }
@@ -1301,77 +1207,34 @@ export async function updatePedidoCustomizado(id: string, params: PedidoCustomiz
       }
     }
 
-    const { error: pedidoError } = await supabase
-      .from('pedidos')
-      .update({
-        ...dadosBasicos,
-        valor_total: valorTotal,
-        tipo_produto_id: params.categoria_id,
-      })
-      .eq('id', id)
+    const { data: action, error: pedidoError } = await supabase.rpc(
+      'atualizar_pedido_atomico',
+      {
+        p_pedido_id: id,
+        p_pedido: {
+          ...dadosBasicos,
+          prioridade: 1,
+          tipo_produto_id: params.categoria_id,
+        },
+        p_itens: [
+          {
+            produto_id: produtoId,
+            quantidade: quantidadeItens,
+            valor_unitario: valorTotal / quantidadeItens,
+            materiais: componentesSelecionados.map((componente) => ({
+              material_id: componente.material_id,
+              quantidade: componente.quantidade * quantidadeItens,
+            })),
+          },
+        ],
+      }
+    )
 
     if (pedidoError) {
-      return { success: false, error: pedidoError.message }
-    }
-
-    const { data: itensAtuais, error: itensAtuaisError } = await supabase
-      .from('pedido_itens')
-      .select('id')
-      .eq('pedido_id', id)
-
-    if (itensAtuaisError) {
-      return { success: false, error: 'Erro ao carregar itens atuais do pedido' }
-    }
-
-    const itemIds = (itensAtuais || []).map((item) => item.id)
-
-    if (itemIds.length > 0) {
-      const { error: materiaisDeleteError } = await supabase
-        .from('pedido_itens_materiais')
-        .delete()
-        .in('pedido_item_id', itemIds)
-
-      if (materiaisDeleteError) {
-        return { success: false, error: 'Erro ao remover materiais antigos do pedido' }
-      }
-    }
-
-    const { error: itensDeleteError } = await supabase
-      .from('pedido_itens')
-      .delete()
-      .eq('pedido_id', id)
-
-    if (itensDeleteError) {
-      return { success: false, error: 'Erro ao remover itens antigos do pedido' }
-    }
-
-    const { data: pedidoItem, error: itemError } = await supabase
-      .from('pedido_itens')
-      .insert({
-        pedido_id: id,
-        produto_id: produtoId,
-        quantidade: quantidadeItens,
-        valor_unitario: valorTotal / quantidadeItens,
+      logServerError('pedidos_update_custom_atomic_failed', pedidoError, {
+        table: 'pedidos',
       })
-      .select()
-      .single()
-
-    if (itemError || !pedidoItem) {
-      return { success: false, error: 'Erro ao recriar item do pedido' }
-    }
-
-    const materiais = componentesSelecionados.map((componente) => ({
-      pedido_item_id: pedidoItem.id,
-      material_id: componente.material_id,
-      quantidade: componente.quantidade * quantidadeItens,
-    }))
-
-    const { error: matError } = await supabase
-      .from('pedido_itens_materiais')
-      .insert(materiais)
-
-    if (matError) {
-      return { success: false, error: 'Erro ao salvar materiais do pedido' }
+      return { success: false, error: pedidoError.message }
     }
 
     revalidatePath('/dashboard/pedidos')
@@ -1379,7 +1242,7 @@ export async function updatePedidoCustomizado(id: string, params: PedidoCustomiz
     revalidatePath('/dashboard/estoque')
     revalidatePath('/p/[slug]', 'page')
     revalidatePath('/acompanhar/[token]', 'page')
-    return { success: true, lockedMaterials: false }
+    return { success: true, lockedMaterials: action === 'materiais_bloqueados' }
   } catch (error) {
     console.error('Error updating customized order:', error)
     return { success: false, error: 'Erro ao editar pedido customizado' }

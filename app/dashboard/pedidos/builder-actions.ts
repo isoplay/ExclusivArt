@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createAuthenticatedClient } from '@/lib/auth'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { arredondarParaCimaMeioReal } from '@/lib/utils'
+import { logServerError } from '@/lib/server-log'
 
 function cleanOptionalText(value: unknown, maxLength = 1200) {
   const text = String(value ?? '').trim().replace(/\s+/g, ' ')
@@ -124,18 +125,55 @@ export async function getComponentesPorCategoria(categoria_id: string) {
   const supabase = await createAuthenticatedClient()
 
   const { data, error } = await supabase
-    .from('vw_componentes_disponiveis')
-    .select('*')
-    .eq('categoria_id', categoria_id)
+    .from('componentes_estoque')
+    .select(
+      `
+      margem_lucro,
+      grupo:grupos_componentes!inner (
+        id,
+        nome,
+        categoria_id,
+        ativo
+      ),
+      material:materiais!inner (
+        id,
+        nome,
+        custo_unitario,
+        quantidade,
+        quantidade_atual,
+        imagem_url,
+        ativo
+      )
+    `
+    )
     .eq('ativo', true)
-    .order('grupo_nome, material_nome')
+    .eq('grupo.categoria_id', categoria_id)
+    .eq('grupo.ativo', true)
+    .eq('material.ativo', true)
 
   if (error) {
     console.error('Error fetching components:', error)
     return []
   }
 
-  return data as ComponenteDisponivel[]
+  return (data || []).map((item: any) => {
+    const estoqueAtual = item.material.quantidade_atual ?? item.material.quantidade ?? 0
+    const custoUnitario = item.material.custo_unitario ?? 0
+    const margemLucro = item.margem_lucro ?? 0
+
+    return {
+      grupo_id: item.grupo.id,
+      grupo_nome: item.grupo.nome,
+      categoria_id: item.grupo.categoria_id,
+      material_id: item.material.id,
+      material_nome: item.material.nome,
+      custo_unitario: custoUnitario,
+      margem_lucro: margemLucro,
+      preco_venda: custoUnitario * (1 + margemLucro / 100),
+      estoque_atual: estoqueAtual,
+      imagem_url: item.material.imagem_url,
+    }
+  }) as ComponenteDisponivel[]
 }
 
 /**
@@ -156,18 +194,20 @@ export async function getComponentesPorGrupo(grupo_id: string) {
       ordem,
       created_at,
       updated_at,
-      material:materiais (
+      material:materiais!inner (
         id,
         nome,
         preco_compra,
         custo_unitario,
         quantidade,
-        imagem_url
+        imagem_url,
+        ativo
       )
     `
     )
     .eq('grupo_id', grupo_id)
     .eq('ativo', true)
+    .eq('material.ativo', true)
     .order('ordem, material->nome')
 
   if (error) {
@@ -189,33 +229,48 @@ export async function validarEstoqueComponentes(
   }>
 ): Promise<{ valid: boolean; messages: string[] }> {
   const supabase = await createAuthenticatedClient()
-
   const messages: string[] = []
-  let valid = true
+  const demandaPorMaterial = componentes.reduce<Map<string, number>>((map, componente) => {
+    map.set(
+      componente.material_id,
+      (map.get(componente.material_id) ?? 0) + componente.quantidade
+    )
+    return map
+  }, new Map())
+  const materialIds = Array.from(demandaPorMaterial.keys())
 
-  for (const componente of componentes) {
-    const { data, error } = await supabase
-      .from('materiais')
-      .select('nome, quantidade, quantidade_atual')
-      .eq('id', componente.material_id)
-      .single()
+  if (materialIds.length === 0) {
+    return { valid: true, messages }
+  }
 
-    if (error || !data) {
-      messages.push(`Material não encontrado`)
-      valid = false
+  const { data: materiais, error } = await supabase
+    .from('materiais')
+    .select('id, nome, quantidade, quantidade_atual')
+    .in('id', materialIds)
+    .eq('ativo', true)
+
+  if (error) {
+    return { valid: false, messages: ['Erro ao consultar o estoque dos materiais'] }
+  }
+
+  const materiaisPorId = new Map((materiais || []).map((material) => [material.id, material]))
+
+  for (const [materialId, quantidade] of demandaPorMaterial) {
+    const material = materiaisPorId.get(materialId)
+    if (!material) {
+      messages.push('Material não encontrado')
       continue
     }
 
-    const estoque = data.quantidade_atual ?? data.quantidade ?? 0
-    if (estoque < componente.quantidade) {
+    const estoque = material.quantidade_atual ?? material.quantidade ?? 0
+    if (estoque < quantidade) {
       messages.push(
-        `${data.nome}: apenas ${estoque} em estoque (pedindo ${componente.quantidade})`
+        `${material.nome}: apenas ${estoque} em estoque (pedindo ${quantidade})`
       )
-      valid = false
     }
   }
 
-  return { valid, messages }
+  return { valid: messages.length === 0, messages }
 }
 
 /**
@@ -272,32 +327,34 @@ export async function calcularPrecoItemMontado(
   }> = []
   let custoMateriais = 0
 
-  for (const componente of componentes) {
-    const { data, error } = await supabase
-      .from('componentes_estoque')
-      .select(
-        `
-        material:materiais (
-          nome,
-          custo_unitario
-        )
-      `
-      )
-      .eq('material_id', componente.material_id)
-      .limit(1)
-      .single()
+  const materialIds = Array.from(
+    new Set(componentes.map((componente) => componente.material_id).filter(Boolean))
+  )
+  const { data: materiais, error: materiaisError } = materialIds.length
+    ? await supabase
+        .from('materiais')
+        .select('id, nome, custo_unitario')
+        .in('id', materialIds)
+        .eq('ativo', true)
+    : { data: [], error: null }
 
-    if (error || !data) {
-      console.error(`Error fetching component price for ${componente.material_id}:`, error)
-      continue
+  if (materiaisError) {
+    throw new Error('Erro ao carregar custos dos materiais')
+  }
+
+  const materiaisPorId = new Map((materiais || []).map((material) => [material.id, material]))
+
+  for (const componente of componentes) {
+    const material = materiaisPorId.get(componente.material_id)
+    if (!material) {
+      throw new Error('Um ou mais materiais nao foram encontrados')
     }
 
-    const material = data.material as any
-    const custo = material?.custo_unitario || 0
+    const custo = material.custo_unitario || 0
     const subtotal = custo * componente.quantidade
 
     detalhes.push({
-      material_nome: material?.nome || 'Unknown',
+      material_nome: material.nome,
       valor_unitario: custo,
       quantidade: componente.quantidade,
       subtotal,
@@ -379,60 +436,35 @@ export async function criarPedidoComMontagem(
     const obsParts = [observacoes, variacao_id ? `Variacao: ${variacao_id}` : null].filter(Boolean)
     const observacoesFinal = obsParts.length > 0 ? obsParts.join(' | ') : null
 
-    const { data: pedido, error: pedidoError } = await supabase
-      .from('pedidos')
-      .insert({
+    const { data: pedidoId, error: pedidoError } = await supabase.rpc('criar_pedido_atomico', {
+      p_pedido: {
         cliente_nome,
         cliente_contato: cliente_telefone || null,
         prazo_entrega: data_entrega || null,
         status: 'orcamento',
-        valor_total,
         observacoes: observacoesFinal,
         observacao_cliente: cleanOptionalText(observacao_cliente),
         prioridade: 1,
-      })
-      .select()
-      .single()
+        tipo_produto_id,
+      },
+      p_itens: [
+        {
+          produto_id: produtoId,
+          quantidade: quantidade_itens,
+          valor_unitario: valor_total / quantidade_itens,
+          materiais: componentes.map((componente) => ({
+            material_id: componente.material_id,
+            quantidade: componente.quantidade * quantidade_itens,
+          })),
+        },
+      ],
+    })
 
-    if (pedidoError || !pedido) {
-      console.error('Error creating order:', pedidoError)
+    if (pedidoError || !pedidoId) {
+      logServerError('pedidos_builder_create_atomic_failed', pedidoError, {
+        table: 'pedidos',
+      })
       return { success: false, error: pedidoError?.message || 'Erro ao criar pedido' }
-    }
-
-    const { data: pedido_item, error: itemError } = await supabase
-      .from('pedido_itens')
-      .insert({
-        pedido_id: pedido.id,
-        produto_id: produtoId,
-        quantidade: quantidade_itens,
-        // Armazena o valor unitário efetivo após margem + arredondamento final
-        valor_unitario: valor_total / quantidade_itens,
-      })
-      .select()
-      .single()
-
-    if (itemError || !pedido_item) {
-      console.error('Error creating order item:', itemError)
-      await supabase.from('pedidos').delete().eq('id', pedido.id)
-      return { success: false, error: 'Erro ao adicionar item' }
-    }
-
-    // Insert custom component composition for this item
-    const componentes_to_insert = componentes.map(c => ({
-      pedido_item_id: pedido_item.id,
-      material_id: c.material_id,
-      quantidade: c.quantidade * quantidade_itens,
-    }))
-
-    const { error: materiaisError } = await supabase
-      .from('pedido_itens_materiais')
-      .insert(componentes_to_insert)
-
-    if (materiaisError) {
-      console.error('Error inserting component composition:', materiaisError)
-      await supabase.from('pedido_itens').delete().eq('id', pedido_item.id)
-      await supabase.from('pedidos').delete().eq('id', pedido.id)
-      return { success: false, error: 'Erro ao salvar composição do item' }
     }
 
     revalidatePath('/dashboard/pedidos')
@@ -440,7 +472,7 @@ export async function criarPedidoComMontagem(
 
     return {
       success: true,
-      pedidoId: pedido.id,
+      pedidoId,
       valor_total,
     }
   } catch (error) {

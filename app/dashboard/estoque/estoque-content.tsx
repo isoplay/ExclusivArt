@@ -438,6 +438,7 @@ export function EstoqueContent({
 
   async function handleDelete(id: string) {
     if (!confirm('Tem certeza que deseja excluir este material?')) return
+
     startTransition(async () => {
       const result = await deleteMaterial(id)
       if (result.success) {
@@ -1164,15 +1165,15 @@ export function EstoqueContent({
                   <Label htmlFor="edit-estoque_atual">Estoque atual</Label>
                   <Input
                     id="edit-estoque_atual"
+                    name="quantidade_atual"
                     type="text"
                     inputMode="decimal"
-                    readOnly
+                    required
                     aria-describedby="edit-estoque_atual-help"
                     defaultValue={formatDecimalInput(getEstoqueAtual(selectedMaterial), 2)}
-                    className="bg-muted"
                   />
                   <p id="edit-estoque_atual-help" className="text-xs text-muted-foreground">
-                    Use Entrada/Saida no menu do material para ajustar o estoque com historico.
+                    A diferença será registrada automaticamente como entrada ou saída.
                   </p>
                 </div>
                 <div className="space-y-2">

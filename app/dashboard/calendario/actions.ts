@@ -14,6 +14,7 @@ export async function getPedidosComEntrega(): Promise<PedidoCalendario[]> {
   const { data, error } = await supabase
     .from('pedidos')
     .select('id, cliente_nome, cliente_contato, prazo_entrega, status, valor_total')
+    .eq('ativo', true)
     .not('prazo_entrega', 'is', null)
     .in('status', ['orcamento', 'confirmado', 'em_producao', 'pronto'])
     .order('prazo_entrega', { ascending: true })

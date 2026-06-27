@@ -67,7 +67,7 @@ function groupByStatus(pedidos: PedidoComItens[]) {
 
 function summarizeFinance(pedidos: Pedido[], despesas: Despesa[]) {
   const receita = pedidos
-    .filter((pedido) => pedido.status !== 'cancelado')
+    .filter((pedido) => pedido.status === 'pronto' || pedido.status === 'entregue')
     .reduce((total, pedido) => total + toNumber(pedido.valor_total), 0)
   const receitaRecebida = pedidos
     .filter((pedido) => pedido.status === 'entregue')
@@ -161,9 +161,10 @@ export async function getOperacaoData() {
           )
         `
         )
+        .eq('ativo', true)
         .in('status', ['confirmado', 'separando_materiais', 'em_producao', 'pronto'])
         .order('prazo_entrega', { ascending: true, nullsFirst: false }),
-      supabase.from('materiais').select('*').order('nome'),
+      supabase.from('materiais').select('*').eq('ativo', true).order('nome'),
       supabase
         .from('movimentacoes_estoque')
         .select('*, material:materiais (nome, unidade, tipo)')
@@ -172,6 +173,7 @@ export async function getOperacaoData() {
       supabase
         .from('pedidos')
         .select('*')
+        .eq('ativo', true)
         .gte('data_pedido', startIso)
         .lte('data_pedido', endIso),
       supabase

@@ -77,12 +77,14 @@ export async function getDashboardMetrics() {
     supabase
       .from('pedidos')
       .select('*')
+      .eq('ativo', true)
       .gte('data_pedido', firstDayOfMonth)
       .lte('data_pedido', lastDayOfMonth),
 
     supabase
       .from('pedidos')
       .select('valor_total,status')
+      .eq('ativo', true)
       .in('status', ['pronto', 'entregue']),
 
     supabase
@@ -92,11 +94,13 @@ export async function getDashboardMetrics() {
     supabase
       .from('pedidos')
       .select('*')
+      .eq('ativo', true)
       .in('status', ['orcamento', 'confirmado', 'em_producao', 'pronto']),
 
     supabase
       .from('materiais')
-      .select('*'),
+      .select('*')
+      .eq('ativo', true),
 
     supabase
       .from('despesas')
@@ -107,12 +111,14 @@ export async function getDashboardMetrics() {
     supabase
       .from('pedidos')
       .select('*')
+      .eq('ativo', true)
       .order('data_pedido', { ascending: false })
       .limit(5),
 
     supabase
       .from('pedidos')
       .select('*')
+      .eq('ativo', true)
       .in('status', ['orcamento', 'confirmado', 'em_producao', 'pronto'])
       .not('prazo_entrega', 'is', null)
       .lte('prazo_entrega', inSevenDays)
@@ -123,6 +129,7 @@ export async function getDashboardMetrics() {
     supabase
       .from('pedidos')
       .select('*')
+      .eq('ativo', true)
       .gte('data_pedido', sevenDaysAgo),
 
     supabase
@@ -201,7 +208,7 @@ export async function getDashboardMetrics() {
   }
 
   const receitaMes = (pedidosMes || []).reduce((acc: number, p: Pedido) => {
-    if (p.status !== 'cancelado') {
+    if (p.status === 'pronto' || p.status === 'entregue') {
       return acc + toNumber(p.valor_total)
     }
     return acc
@@ -255,7 +262,10 @@ export async function getDashboardMetrics() {
   const financeiroUltimosDias = lastSevenDays.map((day) => {
     const key = day.toISOString().split('T')[0]
     const receita = (pedidosUltimosDias || []).reduce((acc: number, pedido: Pedido) => {
-      if (pedido.status === 'cancelado' || toDateKey(pedido.data_pedido) !== key) {
+      if (
+        !['pronto', 'entregue'].includes(pedido.status) ||
+        toDateKey(pedido.data_pedido) !== key
+      ) {
         return acc
       }
 
