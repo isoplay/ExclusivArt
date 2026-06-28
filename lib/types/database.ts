@@ -132,6 +132,102 @@ export type PedidoAcompanhamentoPublico = {
   data_pedido: string
 }
 
+export type StatusOrcamento =
+  | 'rascunho'
+  | 'enviado'
+  | 'aprovado'
+  | 'recusado'
+  | 'convertido'
+  | 'cancelado'
+
+export type OrigemComponenteOrcamento = 'estoque' | 'manual'
+
+export type Orcamento = {
+  id: string
+  cliente_nome: string
+  cliente_contato: string | null
+  cliente_endereco: string | null
+  status: StatusOrcamento
+  slug_publico: string | null
+  validade: string | null
+  prazo_estimado: string | null
+  quantidade_total: number
+  valor_total: number
+  custo_total: number
+  margem_percentual: number
+  observacao_cliente: string | null
+  observacoes_internas: string | null
+  ativo: boolean
+  deleted_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type OrcamentoItem = {
+  id: string
+  orcamento_id: string
+  categoria_id: string | null
+  nome_produto: string
+  quantidade: number
+  custo_unitario: number
+  mao_obra_unitaria: number
+  valor_unitario: number
+  valor_total: number
+  ordem: number
+  created_at: string
+  updated_at: string
+}
+
+export type OrcamentoComponente = {
+  id: string
+  orcamento_item_id: string
+  grupo_id: string | null
+  grupo_nome: string
+  material_id: string | null
+  material_nome: string
+  quantidade_por_item: number
+  unidade: string
+  custo_unitario_estimado: number
+  cor_hex: string | null
+  imagem_url: string | null
+  origem: OrigemComponenteOrcamento
+  observacao: string | null
+  ordem: number
+  created_at: string
+  updated_at: string
+}
+
+export type OrcamentoComItens = Orcamento & {
+  orcamento_itens: (OrcamentoItem & {
+    orcamento_componentes: OrcamentoComponente[]
+  })[]
+}
+
+export type OrcamentoPublico = {
+  cliente_nome: string
+  orcamento_codigo: string
+  status: StatusOrcamento
+  validade: string | null
+  prazo_estimado: string | null
+  quantidade_total: number
+  valor_total: number
+  observacao_cliente: string | null
+  created_at: string
+  itens: Array<{
+    nome_produto: string
+    quantidade: number
+    valor_total: number
+    componentes: Array<{
+      grupo_nome: string
+      material_nome: string
+      quantidade_por_item: number
+      unidade: string
+      cor_hex: string | null
+      origem: OrigemComponenteOrcamento
+    }>
+  }>
+}
+
 export type CategoriaDespesa =
   | 'material'
   | 'ferramenta'
