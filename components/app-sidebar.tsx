@@ -10,6 +10,7 @@ import {
   History,
   LayoutDashboard,
   Package,
+  ReceiptText,
   Settings,
   ShoppingCart,
   Wallet,
@@ -49,6 +50,11 @@ const menuItems = [
     title: 'Pedidos',
     url: '/dashboard/pedidos',
     icon: ShoppingCart,
+  },
+  {
+    title: 'Orçamentos',
+    url: '/dashboard/orcamentos',
+    icon: ReceiptText,
   },
   {
     title: 'Operacao',
