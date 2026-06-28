@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { createPublicClient } from '@/lib/supabase/public'
 import { logServerError } from '@/lib/server-log'
 import { parsePublicOrcamento } from '@/lib/orcamentos/validation'
+import { isValidPublicSlug } from '@/lib/public-tracking-validation'
 import {
   QuotePreview,
   QuoteUnavailable,
@@ -24,7 +25,7 @@ type OrcamentoPublicoPageProps = {
 }
 
 async function getPublicQuote(slug: string) {
-  if (!/^[A-Za-z0-9_-]{8,64}$/.test(slug)) return null
+  if (!isValidPublicSlug(slug)) return null
 
   try {
     const supabase = createPublicClient()

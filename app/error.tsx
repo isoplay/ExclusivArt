@@ -12,7 +12,7 @@ export default function GlobalError({
   useEffect(() => {
     console.error('[exclusivart-client] global_error', {
       digest: error.digest,
-      message: error.message,
+      name: error.name,
     })
   }, [error])
 

@@ -59,8 +59,8 @@ export function GlobalSearch() {
     try {
       const data = await searchGlobal(searchQuery)
       setResults(data)
-    } catch (error) {
-      console.error('Search error:', error)
+    } catch {
+      setResults({ produtos: [], pedidos: [], materiais: [] })
     } finally {
       setIsLoading(false)
     }

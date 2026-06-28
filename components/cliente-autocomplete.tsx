@@ -62,8 +62,7 @@ export function ClienteAutocomplete({
       const results = await searchClientes(searchQuery)
       setSuggestions(results)
       setIsOpen(results.length > 0)
-    } catch (error) {
-      console.error('Search error:', error)
+    } catch {
       setSuggestions([])
     } finally {
       setIsLoading(false)

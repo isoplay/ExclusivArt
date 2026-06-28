@@ -14,7 +14,7 @@ export default function DashboardError({
   useEffect(() => {
     console.error('[exclusivart-client] dashboard_error', {
       digest: error.digest,
-      message: error.message,
+      name: error.name,
     })
   }, [error])
 

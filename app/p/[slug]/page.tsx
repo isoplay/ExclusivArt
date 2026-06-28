@@ -3,6 +3,10 @@ import { createPublicClient } from '@/lib/supabase/public'
 import { logServerError } from '@/lib/server-log'
 import type { PedidoAcompanhamentoPublico, StatusPedido } from '@/lib/types/database'
 import {
+  isValidPublicSlug,
+  parsePublicTrackingPayload,
+} from '@/lib/public-tracking-validation'
+import {
   OrderTrackingPreview,
   OrderTrackingUnavailable,
   type OrderTrackingData,
@@ -14,15 +18,14 @@ export const revalidate = 0
 export const metadata: Metadata = {
   title: 'Acompanhamento do Pedido | Exclusiv ART',
   description: 'Pagina publica de acompanhamento de pedido da Exclusiv ART.',
+  robots: {
+    index: false,
+    follow: false,
+  },
 }
 
 type AcompanharPedidoSlugPageProps = {
   params: Promise<{ slug: string }>
-}
-
-function isValidTrackingSlug(slug: string) {
-  // Short slugs produced by createTrackingSlug + safe fallback range
-  return /^[A-Za-z0-9_-]{8,64}$/.test(slug)
 }
 
 function formatCurrency(value: number) {
@@ -82,7 +85,7 @@ function mapTrackingData(payload: PedidoAcompanhamentoPublico): OrderTrackingDat
 }
 
 async function getTrackingDataBySlug(slug: string) {
-  if (!isValidTrackingSlug(slug)) {
+  if (!isValidPublicSlug(slug)) {
     return null
   }
 
@@ -99,11 +102,19 @@ async function getTrackingDataBySlug(slug: string) {
       return null
     }
 
-    if (!data) {
+    const payload = parsePublicTrackingPayload(data)
+    if (!payload) {
+      if (data) {
+        logServerError(
+          'public_tracking_by_slug_payload_invalid',
+          new Error('Public tracking payload does not match the expected schema'),
+          { route: '/p/[slug]' }
+        )
+      }
       return null
     }
 
-    return mapTrackingData(data as PedidoAcompanhamentoPublico)
+    return mapTrackingData(payload)
   } catch (error) {
     logServerError('public_tracking_by_slug_exception', error, {
       route: '/p/[slug]',

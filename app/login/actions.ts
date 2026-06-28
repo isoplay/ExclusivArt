@@ -1,20 +1,28 @@
 'use server'
 
 import { redirect } from 'next/navigation'
+import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
 
-function loginError(message: string) {
+const loginSchema = z.object({
+  email: z.string().trim().toLowerCase().email().max(254),
+  password: z.string().min(1).max(256),
+})
+
+function loginError(message: string): never {
   redirect(`/login?error=${encodeURIComponent(message)}`)
 }
 
 export async function login(formData: FormData) {
-  const email = String(formData.get('email') ?? '').trim().toLowerCase()
-  const password = String(formData.get('password') ?? '')
-
-  if (!email || !password) {
+  const parsed = loginSchema.safeParse({
+    email: formData.get('email'),
+    password: formData.get('password'),
+  })
+  if (!parsed.success) {
     loginError('Informe email e senha')
   }
 
+  const { email, password } = parsed.data
   const supabase = await createClient()
   const { error } = await supabase.auth.signInWithPassword({ email, password })
 

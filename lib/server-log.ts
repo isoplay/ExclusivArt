@@ -1,10 +1,14 @@
 type LogDetails = Record<string, unknown>
 
-function sanitizeValue(value: unknown): unknown {
+const SENSITIVE_KEY_PATTERN =
+  /(authorization|cookie|password|secret|token|telefone|phone|contato|email)/i
+
+function sanitizeValue(value: unknown, key = ''): unknown {
+  if (SENSITIVE_KEY_PATTERN.test(key)) return '[redacted]'
   if (value === null || value === undefined) return value
   if (typeof value === 'string') return value.slice(0, 240)
   if (typeof value === 'number' || typeof value === 'boolean') return value
-  if (Array.isArray(value)) return value.slice(0, 10).map(sanitizeValue)
+  if (Array.isArray(value)) return value.slice(0, 10).map((item) => sanitizeValue(item))
   return '[object]'
 }
 
@@ -12,7 +16,7 @@ function sanitizeDetails(details?: LogDetails) {
   if (!details) return undefined
 
   return Object.fromEntries(
-    Object.entries(details).map(([key, value]) => [key, sanitizeValue(value)]),
+    Object.entries(details).map(([key, value]) => [key, sanitizeValue(value, key)]),
   )
 }
 
