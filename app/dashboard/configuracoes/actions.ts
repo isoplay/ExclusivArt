@@ -142,7 +142,9 @@ export async function criarTipoComponente(formData: FormData) {
     .eq('ativo', true)
 
   if (categoriasError || !categorias?.length) {
-    console.error('Error fetching categories:', categoriasError)
+    logServerError('config_categories_lookup_failed', categoriasError, {
+      table: 'categorias_produtos',
+    })
     return {
       success: false,
       error: 'Cadastre um produto antes de criar tipos de componente',
@@ -154,8 +156,10 @@ export async function criarTipoComponente(formData: FormData) {
     .select('categoria_id, nome, ordem')
 
   if (gruposError) {
-    console.error('Error fetching existing component groups:', gruposError)
-    return { success: false, error: gruposError.message }
+    logServerError('config_groups_lookup_failed', gruposError, {
+      table: 'grupos_componentes',
+    })
+    return { success: false, error: 'Nao foi possivel consultar os componentes' }
   }
 
   const existingByCategory = new Set(
@@ -182,8 +186,10 @@ export async function criarTipoComponente(formData: FormData) {
     const { error } = await supabase.from('grupos_componentes').insert(gruposParaInserir)
 
     if (error) {
-      console.error('Error creating component type:', error)
-      return { success: false, error: error.message }
+      logServerError('config_create_component_type_failed', error, {
+        table: 'grupos_componentes',
+      })
+      return { success: false, error: 'Nao foi possivel criar o tipo de componente' }
     }
   } else {
     const { error } = await supabase
@@ -192,8 +198,10 @@ export async function criarTipoComponente(formData: FormData) {
       .eq('nome', nome)
 
     if (error) {
-      console.error('Error reactivating component type:', error)
-      return { success: false, error: error.message }
+      logServerError('config_reactivate_component_type_failed', error, {
+        table: 'grupos_componentes',
+      })
+      return { success: false, error: 'Nao foi possivel reativar o tipo de componente' }
     }
   }
 
@@ -234,8 +242,10 @@ export async function alternarTipoComponente(nome: string, ativo: boolean) {
     .eq('nome', tipo)
 
   if (error) {
-    console.error('Error toggling component type:', error)
-    return { success: false, error: error.message }
+    logServerError('config_toggle_component_type_failed', error, {
+      table: 'grupos_componentes',
+    })
+    return { success: false, error: 'Nao foi possivel alterar o tipo de componente' }
   }
 
   revalidateConfiguracoesDependentes()

@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { parseDecimalInput } from '@/lib/number'
 import { createAuthenticatedClient } from '@/lib/auth'
 import { logServerError } from '@/lib/server-log'
+import { isValidUuid, normalizeSingleLine } from '@/lib/security/input'
 import type { Despesa, CategoriaDespesa, Pedido } from '@/lib/types/database'
 
 const EMPTY_FINANCEIRO_RESUMO = {
@@ -58,9 +59,18 @@ export async function getDespesas(mes?: number, ano?: number) {
   const supabase = await createAuthenticatedClient()
 
   try {
-    let query = supabase.from('despesas').select('*').order('data', { ascending: false })
+    let query = supabase
+      .from('despesas')
+      .select('id, descricao, valor, categoria, data, data_pedido')
+      .eq('ativo', true)
+      .is('deleted_at', null)
+      .order('data', { ascending: false })
+      .limit(1000)
 
     if (mes !== undefined && ano !== undefined) {
+      if (!Number.isInteger(mes) || mes < 0 || mes > 11 || !Number.isInteger(ano) || ano < 2000 || ano > 2200) {
+        return []
+      }
       const { startDate, endDate } = getMonthRange(mes, ano)
       query = query.gte('data', startDate).lte('data', endDate)
     }
@@ -82,14 +92,13 @@ export async function getDespesas(mes?: number, ano?: number) {
 export async function createDespesa(formData: FormData) {
   const supabase = await createAuthenticatedClient()
 
-  const descricao = formData.get('descricao') as string
+  const descricao = normalizeSingleLine(formData.get('descricao'), 160)
   const valor = parseDecimalInput(formData.get('valor'))
   const categoriaInput = String(formData.get('categoria') ?? '')
   const data = formData.get('data') as string
 
   if (
-    !descricao.trim() ||
-    descricao.length > 160 ||
+    !descricao ||
     valor < 0 ||
     valor > 1_000_000 ||
     !isCategoriaDespesa(categoriaInput) ||
@@ -104,11 +113,12 @@ export async function createDespesa(formData: FormData) {
     valor,
     categoria,
     data,
+    ativo: true,
   })
 
   if (error) {
     logServerError('financeiro_create_despesa_failed', error, { table: 'despesas' })
-    return { success: false, error: error.message }
+    return { success: false, error: 'Nao foi possivel cadastrar a despesa' }
   }
 
   revalidatePath('/dashboard/financeiro')
@@ -117,16 +127,19 @@ export async function createDespesa(formData: FormData) {
 }
 
 export async function updateDespesa(id: string, formData: FormData) {
+  if (!isValidUuid(id)) {
+    return { success: false, error: 'Despesa invalida' }
+  }
+
   const supabase = await createAuthenticatedClient()
 
-  const descricao = formData.get('descricao') as string
+  const descricao = normalizeSingleLine(formData.get('descricao'), 160)
   const valor = parseDecimalInput(formData.get('valor'))
   const categoriaInput = String(formData.get('categoria') ?? '')
   const data = formData.get('data') as string
 
   if (
-    !descricao.trim() ||
-    descricao.length > 160 ||
+    !descricao ||
     valor < 0 ||
     valor > 1_000_000 ||
     !isCategoriaDespesa(categoriaInput) ||
@@ -145,10 +158,12 @@ export async function updateDespesa(id: string, formData: FormData) {
       data,
     })
     .eq('id', id)
+    .eq('ativo', true)
+    .is('deleted_at', null)
 
   if (error) {
     logServerError('financeiro_update_despesa_failed', error, { table: 'despesas' })
-    return { success: false, error: error.message }
+    return { success: false, error: 'Nao foi possivel atualizar a despesa' }
   }
 
   revalidatePath('/dashboard/financeiro')
@@ -157,13 +172,24 @@ export async function updateDespesa(id: string, formData: FormData) {
 }
 
 export async function deleteDespesa(id: string) {
+  if (!isValidUuid(id)) {
+    return { success: false, error: 'Despesa invalida' }
+  }
+
   const supabase = await createAuthenticatedClient()
 
-  const { error } = await supabase.from('despesas').delete().eq('id', id)
+  const { data: archived, error } = await supabase
+    .from('despesas')
+    .update({ ativo: false, deleted_at: new Date().toISOString() })
+    .eq('id', id)
+    .eq('ativo', true)
+    .is('deleted_at', null)
+    .select('id')
+    .maybeSingle()
 
-  if (error) {
+  if (error || !archived) {
     logServerError('financeiro_delete_despesa_failed', error, { table: 'despesas' })
-    return { success: false, error: error.message }
+    return { success: false, error: 'Nao foi possivel excluir a despesa' }
   }
 
   revalidatePath('/dashboard/financeiro')
@@ -172,6 +198,17 @@ export async function deleteDespesa(id: string) {
 }
 
 export async function getFinanceiroResumo(mes: number, ano: number) {
+  if (
+    !Number.isInteger(mes) ||
+    mes < 0 ||
+    mes > 11 ||
+    !Number.isInteger(ano) ||
+    ano < 2000 ||
+    ano > 2200
+  ) {
+    return EMPTY_FINANCEIRO_RESUMO
+  }
+
   const supabase = await createAuthenticatedClient()
 
   const { startIso, endExclusiveIso } = getMonthTimestampRange(mes, ano)
@@ -180,13 +217,15 @@ export async function getFinanceiroResumo(mes: number, ano: number) {
   const results = await Promise.all([
     supabase
       .from('pedidos')
-      .select('*')
+      .select('id, cliente_nome, cliente_contato, cliente_endereco, status, prioridade, prazo_entrega, observacoes, observacao_cliente, valor_total, tipo_produto_id, estoque_baixado, ativo, deleted_at, data_pedido, updated_at')
       .eq('ativo', true)
       .gte('data_pedido', startIso)
       .lt('data_pedido', endExclusiveIso),
     supabase
       .from('despesas')
-      .select('*')
+      .select('id, descricao, valor, categoria, data, data_pedido')
+      .eq('ativo', true)
+      .is('deleted_at', null)
       .gte('data', startDateOnly)
       .lte('data', endDateOnly),
   ]).catch((error) => {

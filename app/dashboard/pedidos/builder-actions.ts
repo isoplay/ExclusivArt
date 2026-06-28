@@ -5,6 +5,13 @@ import { createAuthenticatedClient } from '@/lib/auth'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { arredondarParaCimaMeioReal } from '@/lib/utils'
 import { logServerError } from '@/lib/server-log'
+import {
+  isFiniteNumberInRange,
+  isValidDateOnly,
+  isValidUuid,
+} from '@/lib/security/input'
+
+const MAX_COMPONENTES_PEDIDO = 100
 
 function cleanOptionalText(value: unknown, maxLength = 1200) {
   const text = String(value ?? '').trim().replace(/\s+/g, ' ')
@@ -107,7 +114,9 @@ export async function getCategorias() {
     .order('ordem')
 
   if (error) {
-    console.error('Error fetching categories:', error)
+    logServerError('pedidos_builder_categories_failed', error, {
+      table: 'categorias_produtos',
+    })
     return []
   }
 
@@ -122,6 +131,8 @@ export async function getCategorias() {
  * Returns grouped by component group
  */
 export async function getComponentesPorCategoria(categoria_id: string) {
+  if (!isValidUuid(categoria_id)) return []
+
   const supabase = await createAuthenticatedClient()
 
   const { data, error } = await supabase
@@ -152,7 +163,9 @@ export async function getComponentesPorCategoria(categoria_id: string) {
     .eq('material.ativo', true)
 
   if (error) {
-    console.error('Error fetching components:', error)
+    logServerError('pedidos_builder_components_failed', error, {
+      table: 'componentes_estoque',
+    })
     return []
   }
 
@@ -180,6 +193,8 @@ export async function getComponentesPorCategoria(categoria_id: string) {
  * Get available components for a specific component group
  */
 export async function getComponentesPorGrupo(grupo_id: string) {
+  if (!isValidUuid(grupo_id)) return []
+
   const supabase = await createAuthenticatedClient()
 
   const { data, error } = await supabase
@@ -211,7 +226,9 @@ export async function getComponentesPorGrupo(grupo_id: string) {
     .order('ordem, material->nome')
 
   if (error) {
-    console.error('Error fetching group components:', error)
+    logServerError('pedidos_builder_group_components_failed', error, {
+      table: 'componentes_estoque',
+    })
     return []
   }
 
@@ -228,6 +245,18 @@ export async function validarEstoqueComponentes(
     quantidade: number
   }>
 ): Promise<{ valid: boolean; messages: string[] }> {
+  if (
+    !Array.isArray(componentes) ||
+    componentes.length > MAX_COMPONENTES_PEDIDO ||
+    componentes.some(
+      (component) =>
+        !isValidUuid(component.material_id) ||
+        !isFiniteNumberInRange(component.quantidade, 0.001, 100_000)
+    )
+  ) {
+    return { valid: false, messages: ['Componentes invalidos'] }
+  }
+
   const supabase = await createAuthenticatedClient()
   const messages: string[] = []
   const demandaPorMaterial = componentes.reduce<Map<string, number>>((map, componente) => {
@@ -304,6 +333,19 @@ export async function calcularPrecoItemMontado(
     subtotal: number
   }>
 }> {
+  if (
+    !isValidUuid(categoria_id) ||
+    !Array.isArray(componentes) ||
+    componentes.length > MAX_COMPONENTES_PEDIDO ||
+    componentes.some(
+      (component) =>
+        !isValidUuid(component.material_id) ||
+        !isFiniteNumberInRange(component.quantidade, 0.001, 100_000)
+    )
+  ) {
+    throw new Error('Componentes invalidos')
+  }
+
   const supabase = await createAuthenticatedClient()
 
   const { data: maodeobra_data, error: maodeobra_error } = await supabase
@@ -313,7 +355,9 @@ export async function calcularPrecoItemMontado(
     .single()
 
   if (maodeobra_error) {
-    console.error('Error fetching labor cost:', maodeobra_error)
+    logServerError('pedidos_builder_labor_failed', maodeobra_error, {
+      table: 'configuracao_maodeobra',
+    })
   }
 
   const maodeobra = maodeobra_data?.valor_maodeobra || 0
@@ -395,6 +439,25 @@ export async function criarPedidoComMontagem(
   const supabase = await createAuthenticatedClient()
 
   try {
+    if (
+      cliente_nome.trim().length < 1 ||
+      cliente_nome.trim().length > 120 ||
+      String(cliente_telefone ?? '').length > 80 ||
+      String(cliente_endereco ?? '').length > 500 ||
+      String(observacoes ?? '').length > 3000 ||
+      String(observacao_cliente ?? '').length > 1200 ||
+      !isValidUuid(tipo_produto_id) ||
+      (variacao_id !== null && !isValidUuid(variacao_id)) ||
+      (Boolean(data_entrega) && !isValidDateOnly(data_entrega)) ||
+      !Number.isInteger(quantidade_itens) ||
+      !isFiniteNumberInRange(quantidade_itens, 1, 10_000) ||
+      !Array.isArray(componentes) ||
+      componentes.length < 1 ||
+      componentes.length > MAX_COMPONENTES_PEDIDO
+    ) {
+      return { success: false, error: 'Dados do pedido invalidos' }
+    }
+
     // Regra do atelie: multiplica o custo base pela quantidade, aplica margem
     // no total e arredonda uma unica vez no final.
 
@@ -417,7 +480,6 @@ export async function criarPedidoComMontagem(
     const validacao = await validarEstoqueComponentes(componentes_total)
 
     if (!validacao.valid) {
-      console.error('Stock validation failed:', validacao.messages)
       return {
         success: false,
         error: `Estoque insuficiente: ${validacao.messages.join(', ')}`,
@@ -464,7 +526,7 @@ export async function criarPedidoComMontagem(
       logServerError('pedidos_builder_create_atomic_failed', pedidoError, {
         table: 'pedidos',
       })
-      return { success: false, error: pedidoError?.message || 'Erro ao criar pedido' }
+      return { success: false, error: 'Nao foi possivel criar o pedido' }
     }
 
     revalidatePath('/dashboard/pedidos')
@@ -476,7 +538,7 @@ export async function criarPedidoComMontagem(
       valor_total,
     }
   } catch (error) {
-    console.error('Unexpected error creating order:', error)
+    logServerError('pedidos_builder_create_exception', error)
     return { success: false, error: 'Erro inesperado ao criar pedido' }
   }
 }
@@ -485,6 +547,10 @@ export async function criarPedidoComMontagem(
  * Get labor cost configuration for a category
  */
 export async function getConfiguracaoMaodeobra(categoria_id: string) {
+  if (!isValidUuid(categoria_id)) {
+    return { valor_maodeobra: 0, descricao: null }
+  }
+
   const supabase = await createAuthenticatedClient()
 
   const { data, error } = await supabase
@@ -494,7 +560,9 @@ export async function getConfiguracaoMaodeobra(categoria_id: string) {
     .single()
 
   if (error) {
-    console.error('Error fetching labor cost:', error)
+    logServerError('pedidos_builder_labor_config_failed', error, {
+      table: 'configuracao_maodeobra',
+    })
     return { valor_maodeobra: 0, descricao: null }
   }
 
@@ -526,7 +594,9 @@ export async function getTodasConfiguracoesMaodeobra() {
     .order('categoria_id')
 
   if (error) {
-    console.error('Error fetching labor costs:', error)
+    logServerError('pedidos_builder_labor_configs_failed', error, {
+      table: 'configuracao_maodeobra',
+    })
     return []
   }
 
@@ -542,20 +612,21 @@ export async function atualizarMaodeobra(
   categoria_id: string,
   novo_valor: number
 ) {
-  const supabase = await createAuthenticatedClient()
-
-  if (novo_valor < 0) {
-    return { success: false, error: 'Valor deve ser positivo' }
+  if (!isValidUuid(categoria_id) || !isFiniteNumberInRange(novo_valor, 0, 1_000_000)) {
+    return { success: false, error: 'Valor ou categoria invalida' }
   }
 
+  const supabase = await createAuthenticatedClient()
   const { error } = await supabase
     .from('configuracao_maodeobra')
     .update({ valor_maodeobra: novo_valor })
     .eq('categoria_id', categoria_id)
 
   if (error) {
-    console.error('Error updating labor cost:', error)
-    return { success: false, error: error.message }
+    logServerError('pedidos_update_labor_cost_failed', error, {
+      table: 'configuracao_maodeobra',
+    })
+    return { success: false, error: 'Nao foi possivel atualizar a mao de obra' }
   }
 
   revalidatePath('/dashboard/configuracoes')

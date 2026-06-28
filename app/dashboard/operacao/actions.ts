@@ -179,6 +179,8 @@ export async function getOperacaoData() {
       supabase
         .from('despesas')
         .select('*')
+        .eq('ativo', true)
+        .is('deleted_at', null)
         .gte('data', startDate)
         .lte('data', endDate),
       supabase

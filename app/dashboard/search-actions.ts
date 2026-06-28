@@ -1,6 +1,7 @@
 'use server'
 
 import { createAuthenticatedClient } from '@/lib/auth'
+import { escapePostgrestSearch } from '@/lib/security/input'
 import type { Produto, Pedido, Material } from '@/lib/types/database'
 
 export type SearchResult = {
@@ -10,10 +11,16 @@ export type SearchResult = {
 }
 
 export async function searchGlobal(query: string): Promise<SearchResult> {
-  const supabase = await createAuthenticatedClient()
-  const searchTerm = `%${query}%`
+  const normalizedQuery = query.trim().replace(/\s+/g, ' ')
+  if (normalizedQuery.length < 2 || normalizedQuery.length > 80) {
+    return { produtos: [], pedidos: [], materiais: [] }
+  }
 
-  const [produtosResult, pedidosResult, materiaisResult] = await Promise.all([
+  const supabase = await createAuthenticatedClient()
+  const searchTerm = `%${escapePostgrestSearch(normalizedQuery)}%`
+
+  const [produtosResult, pedidosNomeResult, pedidosContatoResult, materiaisResult] =
+    await Promise.all([
     supabase
       .from('produtos')
       .select('id, nome, tipo, preco_venda')
@@ -21,24 +28,39 @@ export async function searchGlobal(query: string): Promise<SearchResult> {
       .eq('ativo', true)
       .limit(5),
 
-    supabase
-      .from('pedidos')
-      .select('id, cliente_nome, status, valor_total')
-      .or(`cliente_nome.ilike.${searchTerm},cliente_contato.ilike.${searchTerm}`)
-      .eq('ativo', true)
-      .limit(5),
+      supabase
+        .from('pedidos')
+        .select('id, cliente_nome, status, valor_total')
+        .ilike('cliente_nome', searchTerm)
+        .eq('ativo', true)
+        .limit(5),
 
-    supabase
-      .from('materiais')
-      .select('id, nome, quantidade, unidade')
-      .ilike('nome', searchTerm)
-      .eq('ativo', true)
-      .limit(5),
-  ])
+      supabase
+        .from('pedidos')
+        .select('id, cliente_nome, status, valor_total')
+        .ilike('cliente_contato', searchTerm)
+        .eq('ativo', true)
+        .limit(5),
+
+      supabase
+        .from('materiais')
+        .select('id, nome, quantidade, unidade')
+        .ilike('nome', searchTerm)
+        .eq('ativo', true)
+        .limit(5),
+    ])
+
+  const pedidos = Array.from(
+    new Map(
+      [...(pedidosNomeResult.data || []), ...(pedidosContatoResult.data || [])].map(
+        (pedido) => [pedido.id, pedido]
+      )
+    ).values()
+  ).slice(0, 5)
 
   return {
     produtos: produtosResult.data || [],
-    pedidos: pedidosResult.data || [],
+    pedidos,
     materiais: materiaisResult.data || [],
   }
 }

@@ -1,6 +1,7 @@
 'use server'
 
 import { createAuthenticatedClient } from '@/lib/auth'
+import { logServerError } from '@/lib/server-log'
 import type { Pedido } from '@/lib/types/database'
 
 export type PedidoCalendario = Pick<
@@ -18,9 +19,10 @@ export async function getPedidosComEntrega(): Promise<PedidoCalendario[]> {
     .not('prazo_entrega', 'is', null)
     .in('status', ['orcamento', 'confirmado', 'em_producao', 'pronto'])
     .order('prazo_entrega', { ascending: true })
+    .limit(500)
 
   if (error) {
-    console.error('Error fetching orders:', error)
+    logServerError('calendario_get_orders_failed', error, { table: 'pedidos' })
     return []
   }
 

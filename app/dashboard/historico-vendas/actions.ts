@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createAuthenticatedClient } from '@/lib/auth'
 import { parseDecimalInput } from '@/lib/number'
 import { logServerError } from '@/lib/server-log'
+import { isValidDateOnly } from '@/lib/security/input'
 import type { StatusPedido, VendaHistorica } from '@/lib/types/database'
 
 export type HistoricoVendasFilters = {
@@ -90,13 +91,13 @@ const PEDIDOS_HISTORICO_STATUS: StatusPedido[] = ['pronto', 'entregue']
 
 function sanitizeDate(value: unknown) {
   const date = String(value ?? '').trim()
-  return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : ''
+  return isValidDateOnly(date) ? date : ''
 }
 
 function normalizeDateCell(value: string) {
   const trimmed = value.trim()
   if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-    return trimmed
+    return isValidDateOnly(trimmed) ? trimmed : ''
   }
 
   const brDate = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
@@ -105,7 +106,8 @@ function normalizeDateCell(value: string) {
   }
 
   const [, day, month, year] = brDate
-  return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
+  const normalized = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
+  return isValidDateOnly(normalized) ? normalized : ''
 }
 
 function cleanText(value: FormDataEntryValue | string | null | undefined, maxLength: number) {
@@ -278,6 +280,7 @@ export async function getHistoricoVendas(filters: HistoricoVendasFilters = {}) {
       .from('vendas_historicas')
       .select('*')
       .order('data_venda', { ascending })
+      .limit(5000)
 
     const pedidosQuery = supabase
       .from('pedidos')
@@ -300,6 +303,7 @@ export async function getHistoricoVendas(filters: HistoricoVendasFilters = {}) {
       .eq('ativo', true)
       .in('status', PEDIDOS_HISTORICO_STATUS)
       .order('data_pedido', { ascending })
+      .limit(5000)
 
     const [vendasResult, pedidosResult] = await Promise.all([vendasQuery, pedidosQuery])
     const registros: HistoricoVendaRegistro[] = []
@@ -382,7 +386,7 @@ export async function createVendaHistorica(formData: FormData) {
     logServerError('historico_vendas_create_failed', error, {
       table: 'vendas_historicas',
     })
-    return { success: false, error: error.message }
+    return { success: false, error: 'Nao foi possivel cadastrar a venda' }
   }
 
   revalidatePath('/dashboard/historico-vendas')
@@ -530,7 +534,7 @@ export async function importVendasHistoricasCsv(formData: FormData) {
       table: 'vendas_historicas',
       count: vendas.length,
     })
-    return { success: false, error: error.message }
+    return { success: false, error: 'Nao foi possivel importar as vendas' }
   }
 
   revalidatePath('/dashboard/historico-vendas')

@@ -105,6 +105,8 @@ export async function getDashboardMetrics() {
     supabase
       .from('despesas')
       .select('*')
+      .eq('ativo', true)
+      .is('deleted_at', null)
       .gte('data', firstDayOfMonth)
       .lte('data', lastDayOfMonth),
 
@@ -135,6 +137,8 @@ export async function getDashboardMetrics() {
     supabase
       .from('despesas')
       .select('*')
+      .eq('ativo', true)
+      .is('deleted_at', null)
       .gte('data', sevenDaysAgo.split('T')[0]),
   ]).catch((error) => {
     logServerError('dashboard_metrics_exception', error)

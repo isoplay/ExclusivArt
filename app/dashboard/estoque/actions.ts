@@ -5,6 +5,11 @@ import { areDecimalValuesClose, parseDecimalInput, roundCurrency } from '@/lib/n
 import { createAuthenticatedClient } from '@/lib/auth'
 import { getCanonicalMaterialType } from '@/lib/material-types'
 import { logServerError } from '@/lib/server-log'
+import {
+  isFiniteNumberInRange,
+  isValidUuid,
+  normalizeSingleLine,
+} from '@/lib/security/input'
 import type { Material, TipoMovimentacao } from '@/lib/types/database'
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024
@@ -77,11 +82,26 @@ async function validatePublicImageUrl(publicUrl: string) {
   }
 }
 
-function validateMaterialFields(nome: string, tipo: string, quantidade: number, custoUnitario: number) {
+function validateMaterialFields(
+  nome: string,
+  tipo: string,
+  unidade: string,
+  cor: string,
+  quantidade: number,
+  quantidadeMinima: number,
+  custoUnitario: number
+) {
   if (!nome.trim() || nome.length > 120) return 'Nome do material invalido'
   if (!tipo.trim() || tipo.length > 60) return 'Tipo de componente invalido'
-  if (quantidade < 0 || quantidade > 1_000_000) return 'Quantidade invalida'
-  if (custoUnitario < 0 || custoUnitario > 1_000_000) return 'Custo unitario invalido'
+  if (!/^[\p{L}\p{N} ./%-]{1,20}$/u.test(unidade)) return 'Unidade invalida'
+  if (cor && !/^#[0-9a-f]{6}$/i.test(cor)) return 'Cor invalida'
+  if (!isFiniteNumberInRange(quantidade, 0, 1_000_000)) return 'Quantidade invalida'
+  if (!isFiniteNumberInRange(quantidadeMinima, 0, 1_000_000)) {
+    return 'Quantidade minima invalida'
+  }
+  if (!isFiniteNumberInRange(custoUnitario, 0, 1_000_000)) {
+    return 'Custo unitario invalido'
+  }
   return null
 }
 
@@ -136,6 +156,7 @@ export async function getMateriais() {
       .select('*')
       .eq('ativo', true)
       .order('nome')
+      .limit(1000)
 
     if (error) {
       logServerError('estoque_get_materiais_failed', error, { table: 'materiais' })
@@ -150,6 +171,8 @@ export async function getMateriais() {
 }
 
 export async function getMaterial(id: string) {
+  if (!isValidUuid(id)) return null
+
   const supabase = await createAuthenticatedClient()
 
   try {
@@ -174,12 +197,12 @@ export async function getMaterial(id: string) {
 export async function uploadImagemMaterial(file: File): Promise<ImageUploadResult> {
   const supabase = await createAuthenticatedClient()
 
-  const fileExt = await getSafeImageExtension(file)
-  const fileName = `${crypto.randomUUID()}-${Date.now()}.${fileExt}`
-  const filePath = `materiais/${fileName}`
-  const contentType = getImageContentType(file, fileExt)
-
   try {
+    const fileExt = await getSafeImageExtension(file)
+    const fileName = `${crypto.randomUUID()}-${Date.now()}.${fileExt}`
+    const filePath = `materiais/${fileName}`
+    const contentType = getImageContentType(file, fileExt)
+
     const { error } = await supabase.storage
       .from('imagens-estoque')
       .upload(filePath, file, {
@@ -196,7 +219,7 @@ export async function uploadImagemMaterial(file: File): Promise<ImageUploadResul
       })
       return {
         url: null,
-        error: `Falha ao enviar imagem para o Storage: ${error.message}`,
+        error: 'Falha ao enviar imagem para o Storage',
       }
     }
 
@@ -221,7 +244,10 @@ export async function uploadImagemMaterial(file: File): Promise<ImageUploadResul
     })
     return {
       url: null,
-      error: error instanceof Error ? error.message : 'Erro ao enviar imagem',
+      error:
+        error instanceof Error && /Imagem maior|Use apenas imagens/.test(error.message)
+          ? error.message
+          : 'Erro ao enviar imagem',
     }
   }
 }
@@ -229,10 +255,10 @@ export async function uploadImagemMaterial(file: File): Promise<ImageUploadResul
 export async function createMaterial(formData: FormData) {
   const supabase = await createAuthenticatedClient()
 
-  const nome = formData.get('nome') as string
+  const nome = normalizeSingleLine(formData.get('nome'), 120) ?? ''
   const tipo = getCanonicalMaterialType(formData.get('tipo') as string)
-  const unidade = formData.get('unidade') as string
-  const cor = formData.get('cor') as string
+  const unidade = normalizeSingleLine(formData.get('unidade'), 20) ?? ''
+  const cor = String(formData.get('cor') ?? '').trim()
   const quantidade = parseDecimalInput(formData.get('quantidade'))
   const quantidade_minima = parseDecimalInput(formData.get('quantidade_minima')) || 30
   const custo_unitario_input = parseDecimalInput(formData.get('custo_unitario'))
@@ -240,7 +266,15 @@ export async function createMaterial(formData: FormData) {
   const imagem = formData.get('imagem') as File | null
   const imagemUrlResult = getSafeImageUrl(formData.get('imagem_url'))
   const validationError = tipo
-    ? validateMaterialFields(nome, tipo, quantidade, custo_unitario_input)
+    ? validateMaterialFields(
+        nome,
+        tipo,
+        unidade,
+        cor,
+        quantidade,
+        quantidade_minima,
+        custo_unitario_input
+      )
     : 'Tipo de componente invalido'
 
   if (validationError) {
@@ -261,7 +295,7 @@ export async function createMaterial(formData: FormData) {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Imagem invalida',
+        error: 'Imagem invalida',
       }
     }
   }
@@ -299,7 +333,7 @@ export async function createMaterial(formData: FormData) {
       table: 'materiais',
       hasImage: Boolean(imagem_url),
     })
-    return { success: false, error: error?.message || 'Erro ao cadastrar material' }
+    return { success: false, error: 'Nao foi possivel cadastrar o material' }
   }
 
   revalidatePath('/dashboard/estoque')
@@ -308,12 +342,16 @@ export async function createMaterial(formData: FormData) {
 }
 
 export async function updateMaterial(materialId: string, formData: FormData) {
+  if (!isValidUuid(materialId)) {
+    return { success: false, error: 'Material invalido' }
+  }
+
   const supabase = await createAuthenticatedClient()
 
-  const nome = formData.get('nome') as string
+  const nome = normalizeSingleLine(formData.get('nome'), 120) ?? ''
   const tipo = getCanonicalMaterialType(formData.get('tipo') as string)
-  const unidade = formData.get('unidade') as string
-  const cor = formData.get('cor') as string
+  const unidade = normalizeSingleLine(formData.get('unidade'), 20) ?? ''
+  const cor = String(formData.get('cor') ?? '').trim()
   const novaQuantidadeAtual = parseDecimalInput(formData.get('quantidade_atual'))
   const quantidade_minima = parseDecimalInput(formData.get('quantidade_minima')) || 30
   const custo_unitario_input = parseDecimalInput(formData.get('custo_unitario'))
@@ -349,7 +387,7 @@ export async function updateMaterial(materialId: string, formData: FormData) {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Imagem invalida',
+        error: 'Imagem invalida',
       }
     }
   }
@@ -360,7 +398,15 @@ export async function updateMaterial(materialId: string, formData: FormData) {
   const custoUnitarioAtual = toFiniteNumber(materialAtual.custo_unitario)
   const precoCompraAtual = roundCurrency(toFiniteNumber(materialAtual.preco_compra))
   const validationError = tipo
-    ? validateMaterialFields(nome, tipo, quantidadeBase, custo_unitario_input)
+    ? validateMaterialFields(
+        nome,
+        tipo,
+        unidade,
+        cor,
+        quantidadeBase,
+        quantidade_minima,
+        custo_unitario_input
+      )
     : 'Tipo de componente invalido'
 
   if (validationError) {
@@ -399,7 +445,7 @@ export async function updateMaterial(materialId: string, formData: FormData) {
       table: 'materiais',
       hasImage: Boolean(imagem_url),
     })
-    return { success: false, error: error.message }
+    return { success: false, error: 'Nao foi possivel atualizar o material' }
   }
 
   revalidatePath('/dashboard/estoque')
@@ -408,6 +454,10 @@ export async function updateMaterial(materialId: string, formData: FormData) {
 }
 
 export async function deleteMaterial(materialId: string) {
+  if (!isValidUuid(materialId)) {
+    return { success: false, error: 'Material invalido' }
+  }
+
   const supabase = await createAuthenticatedClient()
 
   const { data: action, error } = await supabase.rpc('excluir_ou_arquivar_material', {
@@ -416,7 +466,7 @@ export async function deleteMaterial(materialId: string) {
 
   if (error) {
     logServerError('estoque_delete_material_failed', error, { table: 'materiais' })
-    return { success: false, error: error.message }
+    return { success: false, error: 'Nao foi possivel excluir o material' }
   }
 
   revalidatePath('/dashboard/estoque')
@@ -436,13 +486,23 @@ export async function registrarMovimentacao(
   quantidade: number,
   motivo?: string
 ) {
+  const motivoLimpo = motivo ? normalizeSingleLine(motivo, 500) : null
+  if (
+    !isValidUuid(materialId) ||
+    !['entrada', 'saida'].includes(tipo) ||
+    !isFiniteNumberInRange(quantidade, 0.001, 1_000_000) ||
+    (motivo && !motivoLimpo)
+  ) {
+    return { success: false, error: 'Movimentacao invalida' }
+  }
+
   const supabase = await createAuthenticatedClient()
 
   const { error } = await supabase.rpc('registrar_movimentacao_material', {
     p_material_id: materialId,
     p_tipo: tipo,
     p_quantidade: quantidade,
-    p_motivo: motivo || null,
+    p_motivo: motivoLimpo,
   })
 
   if (error) {
@@ -450,7 +510,7 @@ export async function registrarMovimentacao(
       table: 'movimentacoes_estoque',
       tipo,
     })
-    return { success: false, error: error.message }
+    return { success: false, error: 'Nao foi possivel registrar a movimentacao' }
   }
 
   revalidatePath('/dashboard/estoque')
@@ -459,6 +519,8 @@ export async function registrarMovimentacao(
 }
 
 export async function getMovimentacoes(materialId: string) {
+  if (!isValidUuid(materialId)) return []
+
   const supabase = await createAuthenticatedClient()
 
   try {

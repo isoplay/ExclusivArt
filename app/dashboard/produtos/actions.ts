@@ -4,6 +4,12 @@ import { revalidatePath } from 'next/cache'
 import { parseDecimalInput } from '@/lib/number'
 import { createAuthenticatedClient } from '@/lib/auth'
 import { MATERIAL_TYPES } from '@/lib/material-types'
+import { logServerError } from '@/lib/server-log'
+import {
+  isFiniteNumberInRange,
+  isValidUuid,
+  normalizeSingleLine,
+} from '@/lib/security/input'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Produto, Material, ProdutoComMateriais } from '@/lib/types/database'
 
@@ -15,10 +21,35 @@ function normalizeKey(value: string | null | undefined) {
     .replace(/[\u0300-\u036f]/g, '')
 }
 
-function validateProdutoInput(nome: string, valorMaodeobra: number) {
+const MAX_COMPOSICAO_ITEMS = 100
+
+function validateProdutoInput(
+  nome: string,
+  tipo: string,
+  precoVenda: number,
+  margemLucro: number,
+  valorMaodeobra: number
+) {
   if (!nome.trim() || nome.length > 120) return 'Nome do produto invalido'
-  if (valorMaodeobra < 0 || valorMaodeobra > 1_000_000) return 'Valor de mao de obra invalido'
+  if (!tipo.trim() || tipo.length > 60) return 'Tipo do produto invalido'
+  if (!isFiniteNumberInRange(precoVenda, 0, 1_000_000_000)) return 'Preco invalido'
+  if (!isFiniteNumberInRange(margemLucro, 0, 100_000)) return 'Margem invalida'
+  if (!isFiniteNumberInRange(valorMaodeobra, 0, 1_000_000)) {
+    return 'Valor de mao de obra invalido'
+  }
   return null
+}
+
+function isValidComposicao(composicao: ComposicaoInput[]) {
+  return (
+    Array.isArray(composicao) &&
+    composicao.length <= MAX_COMPOSICAO_ITEMS &&
+    composicao.every(
+      (item) =>
+        isValidUuid(item.material_id) &&
+        isFiniteNumberInRange(item.quantidade_usada, 0.001, 100_000)
+    )
+  )
 }
 
 async function syncTiposComponentesForCategoria(
@@ -60,8 +91,10 @@ async function syncTiposComponentesForCategoria(
 
   const { error } = await supabase.from('grupos_componentes').insert(inserir)
   if (error) {
-    console.error('Error syncing component groups for product category:', error)
-    return { success: false, error: error.message }
+    logServerError('produtos_sync_component_groups_failed', error, {
+      table: 'grupos_componentes',
+    })
+    return { success: false, error: 'Nao foi possivel sincronizar os componentes' }
   }
 
   return { success: true }
@@ -94,7 +127,12 @@ async function syncProdutoComoCategoria(
       })
       .eq('id', categoriaId)
 
-    if (error) return { success: false, error: error.message }
+    if (error) {
+      logServerError('produtos_sync_category_failed', error, {
+        table: 'categorias_produtos',
+      })
+      return { success: false, error: 'Nao foi possivel sincronizar o tipo de produto' }
+    }
   } else {
     const { data: ultima } = await supabase
       .from('categorias_produtos')
@@ -115,7 +153,10 @@ async function syncProdutoComoCategoria(
       .single()
 
     if (error || !novaCategoria) {
-      return { success: false, error: error?.message || 'Erro ao criar tipo de produto' }
+      logServerError('produtos_create_category_failed', error, {
+        table: 'categorias_produtos',
+      })
+      return { success: false, error: 'Nao foi possivel criar o tipo de produto' }
     }
 
     categoriaId = novaCategoria.id
@@ -131,8 +172,10 @@ async function syncProdutoComoCategoria(
   )
 
   if (maodeobraError) {
-    console.error('Error syncing labor cost:', maodeobraError)
-    return { success: false, error: maodeobraError.message }
+    logServerError('produtos_sync_labor_failed', maodeobraError, {
+      table: 'configuracao_maodeobra',
+    })
+    return { success: false, error: 'Nao foi possivel sincronizar a mao de obra' }
   }
 
   return syncTiposComponentesForCategoria(supabase, categoriaId)
@@ -173,9 +216,10 @@ export async function getProdutos() {
       )
     `)
     .order('nome')
+    .limit(500)
 
   if (error) {
-    console.error('Error fetching products:', error)
+    logServerError('produtos_list_failed', error, { table: 'produtos' })
     return []
   }
 
@@ -183,6 +227,8 @@ export async function getProdutos() {
 }
 
 export async function getProduto(id: string) {
+  if (!isValidUuid(id)) return null
+
   const supabase = await createAuthenticatedClient()
 
   const { data, error } = await supabase
@@ -199,7 +245,7 @@ export async function getProduto(id: string) {
     .single()
 
   if (error) {
-    console.error('Error fetching product:', error)
+    logServerError('produtos_get_failed', error, { table: 'produtos' })
     return null
   }
 
@@ -214,9 +260,10 @@ export async function getMateriais() {
     .select('*')
     .eq('ativo', true)
     .order('nome')
+    .limit(1000)
 
   if (error) {
-    console.error('Error fetching materials:', error)
+    logServerError('produtos_materials_failed', error, { table: 'materiais' })
     return []
   }
 
@@ -229,6 +276,15 @@ export async function calcularCustoProduto(
   margemLucro: number,
   precoVenda?: number
 ): Promise<CustoProdutoCalculado> {
+  if (
+    !isValidComposicao(composicao) ||
+    !isFiniteNumberInRange(valorMaodeobra, 0, 1_000_000) ||
+    !isFiniteNumberInRange(margemLucro, 0, 100_000) ||
+    (precoVenda !== undefined && !isFiniteNumberInRange(precoVenda, 0, 1_000_000_000))
+  ) {
+    throw new Error('Dados de custo invalidos')
+  }
+
   const supabase = await createAuthenticatedClient()
   const detalhes: CustoProdutoCalculado['detalhes'] = []
   let custo_materiais = 0
@@ -291,6 +347,10 @@ async function saveComposicao(
   produtoId: string,
   composicao: ComposicaoInput[]
 ) {
+  if (!isValidUuid(produtoId) || !isValidComposicao(composicao)) {
+    throw new Error('Composicao invalida')
+  }
+
   const validItems = composicao.filter(
     (item) => item.material_id && item.quantidade_usada > 0
   )
@@ -304,8 +364,10 @@ async function saveComposicao(
   })
 
   if (error) {
-    console.error('Error saving composition:', error)
-    throw new Error(error.message)
+    logServerError('produtos_save_composition_failed', error, {
+      table: 'produto_materiais',
+    })
+    throw new Error('Nao foi possivel salvar a composicao')
   }
 }
 
@@ -315,15 +377,21 @@ export async function createProduto(
 ) {
   const supabase = await createAuthenticatedClient()
 
-  const nome = formData.get('nome') as string
-  const tipo = formData.get('tipo') as string
+  const nome = normalizeSingleLine(formData.get('nome'), 120) ?? ''
+  const tipo = normalizeSingleLine(formData.get('tipo'), 60) ?? ''
   const preco_venda = parseDecimalInput(formData.get('preco_venda'))
   const margem_lucro = parseDecimalInput(formData.get('margem_lucro')) || 30
   const valor_maodeobra = parseDecimalInput(formData.get('valor_maodeobra'))
-  const validationError = validateProdutoInput(nome, valor_maodeobra)
+  const validationError = validateProdutoInput(
+    nome,
+    tipo,
+    preco_venda,
+    margem_lucro,
+    valor_maodeobra
+  )
 
-  if (validationError) {
-    return { success: false, error: validationError }
+  if (validationError || !isValidComposicao(composicao)) {
+    return { success: false, error: validationError || 'Composicao invalida' }
   }
 
   const { data: produto, error: produtoError } = await supabase
@@ -340,8 +408,8 @@ export async function createProduto(
     .single()
 
   if (produtoError || !produto) {
-    console.error('Error creating product:', produtoError)
-    return { success: false, error: produtoError?.message || 'Erro ao criar produto' }
+    logServerError('produtos_create_failed', produtoError, { table: 'produtos' })
+    return { success: false, error: 'Nao foi possivel criar o produto' }
   }
 
   try {
@@ -373,18 +441,28 @@ export async function updateProduto(
   formData: FormData,
   composicao?: ComposicaoInput[]
 ) {
+  if (!isValidUuid(id)) {
+    return { success: false, error: 'Produto invalido' }
+  }
+
   const supabase = await createAuthenticatedClient()
 
-  const nome = formData.get('nome') as string
-  const tipo = formData.get('tipo') as string
+  const nome = normalizeSingleLine(formData.get('nome'), 120) ?? ''
+  const tipo = normalizeSingleLine(formData.get('tipo'), 60) ?? ''
   const preco_venda = parseDecimalInput(formData.get('preco_venda'))
   const margem_lucro = parseDecimalInput(formData.get('margem_lucro')) || 30
   const valor_maodeobra = parseDecimalInput(formData.get('valor_maodeobra'))
   const ativo = formData.get('ativo') === 'true'
-  const validationError = validateProdutoInput(nome, valor_maodeobra)
+  const validationError = validateProdutoInput(
+    nome,
+    tipo,
+    preco_venda,
+    margem_lucro,
+    valor_maodeobra
+  )
 
-  if (validationError) {
-    return { success: false, error: validationError }
+  if (validationError || (composicao !== undefined && !isValidComposicao(composicao))) {
+    return { success: false, error: validationError || 'Composicao invalida' }
   }
 
   const { error: produtoError } = await supabase
@@ -400,8 +478,8 @@ export async function updateProduto(
     .eq('id', id)
 
   if (produtoError) {
-    console.error('Error updating product:', produtoError)
-    return { success: false, error: produtoError.message }
+    logServerError('produtos_update_failed', produtoError, { table: 'produtos' })
+    return { success: false, error: 'Nao foi possivel atualizar o produto' }
   }
 
   if (composicao) {
@@ -430,6 +508,10 @@ export async function updateProduto(
 }
 
 export async function duplicateProduto(id: string) {
+  if (!isValidUuid(id)) {
+    return { success: false, error: 'Produto invalido' }
+  }
+
   const produto = await getProduto(id)
   if (!produto) {
     return { success: false, error: 'Produto nao encontrado' }
@@ -450,7 +532,8 @@ export async function duplicateProduto(id: string) {
     .single()
 
   if (error || !novo) {
-    return { success: false, error: error?.message || 'Erro ao duplicar' }
+    logServerError('produtos_duplicate_failed', error, { table: 'produtos' })
+    return { success: false, error: 'Nao foi possivel duplicar o produto' }
   }
 
   const composicao = produto.produto_materiais.map((pm) => ({
@@ -477,6 +560,10 @@ export async function duplicateProduto(id: string) {
 }
 
 export async function deleteProduto(id: string) {
+  if (!isValidUuid(id)) {
+    return { success: false, error: 'Produto invalido' }
+  }
+
   const supabase = await createAuthenticatedClient()
   const { data: produto } = await supabase
     .from('produtos')
@@ -490,8 +577,8 @@ export async function deleteProduto(id: string) {
     .eq('id', id)
 
   if (error) {
-    console.error('Error archiving product:', error)
-    return { success: false, error: error.message }
+    logServerError('produtos_archive_failed', error, { table: 'produtos' })
+    return { success: false, error: 'Nao foi possivel arquivar o produto' }
   }
 
   if (produto?.nome) {
@@ -508,13 +595,17 @@ export async function deleteProduto(id: string) {
 }
 
 export async function toggleProdutoAtivo(id: string, ativo: boolean) {
+  if (!isValidUuid(id) || typeof ativo !== 'boolean') {
+    return { success: false, error: 'Produto invalido' }
+  }
+
   const supabase = await createAuthenticatedClient()
 
   const { error } = await supabase.from('produtos').update({ ativo }).eq('id', id)
 
   if (error) {
-    console.error('Error toggling product:', error)
-    return { success: false, error: error.message }
+    logServerError('produtos_toggle_failed', error, { table: 'produtos' })
+    return { success: false, error: 'Nao foi possivel alterar o produto' }
   }
 
   const { data: produto } = await supabase
@@ -537,6 +628,8 @@ export async function toggleProdutoAtivo(id: string, ativo: boolean) {
 }
 
 export async function getComposicaoProduto(produtoId: string): Promise<ComposicaoInput[]> {
+  if (!isValidUuid(produtoId)) return []
+
   const supabase = await createAuthenticatedClient()
 
   const { data, error } = await supabase

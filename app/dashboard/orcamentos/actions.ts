@@ -713,9 +713,7 @@ export async function deleteOrcamento(id: string) {
 }
 
 function createOrcamentoSlug() {
-  const prefix = randomBytes(2).toString('hex').toUpperCase()
-  const suffix = randomBytes(5).toString('base64url').replace(/[-_]/g, '').slice(0, 6)
-  return `EXO-${prefix}-${suffix}`
+  return `EXO-${randomBytes(18).toString('base64url')}`
 }
 
 async function ensureOrcamentoSlug(

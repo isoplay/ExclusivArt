@@ -8,6 +8,12 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Pedido, PedidoComItens, Produto, StatusPedido, Material, ProdutoMaterial } from '@/lib/types/database'
 import { arredondarParaCimaMeioReal } from '@/lib/utils'
 import { logServerError } from '@/lib/server-log'
+import {
+  escapePostgrestSearch,
+  isFiniteNumberInRange,
+  isValidDateOnly,
+  isValidUuid,
+} from '@/lib/security/input'
 
 function normalizeKey(value: string | null | undefined) {
   return String(value ?? '')
@@ -96,9 +102,10 @@ export async function getPedidos() {
     `)
     .eq('ativo', true)
     .order('data_pedido', { ascending: false })
+    .limit(500)
 
   if (error) {
-    console.error('Error fetching orders:', error)
+    logServerError('pedidos_list_failed', error, { table: 'pedidos' })
     return []
   }
 
@@ -106,6 +113,8 @@ export async function getPedidos() {
 }
 
 export async function getPedido(id: string) {
+  if (!isValidUuid(id)) return null
+
   const supabase = await createAuthenticatedClient()
   
   const { data, error } = await supabase
@@ -131,7 +140,7 @@ export async function getPedido(id: string) {
     .single()
 
   if (error) {
-    console.error('Error fetching order:', error)
+    logServerError('pedidos_get_failed', error, { table: 'pedidos' })
     return null
   }
 
@@ -146,9 +155,10 @@ export async function getProdutosAtivos() {
     .select('*')
     .eq('ativo', true)
     .order('nome')
+    .limit(500)
 
   if (error) {
-    console.error('Error fetching products:', error)
+    logServerError('pedidos_products_failed', error, { table: 'produtos' })
     return []
   }
 
@@ -163,9 +173,10 @@ export async function getMateriaisDisponiveis() {
     .select('*')
     .eq('ativo', true)
     .order('nome')
+    .limit(1000)
 
   if (error) {
-    console.error('Error fetching materials:', error)
+    logServerError('pedidos_materials_failed', error, { table: 'materiais' })
     return []
   }
 
@@ -208,7 +219,8 @@ const statusPermitidos: StatusPedido[] = [
   'cancelado',
 ]
 
-const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const MAX_PEDIDO_ITEMS = 50
+const MAX_PEDIDO_COMPONENTS = 100
 
 function createTrackingToken() {
   return randomBytes(32).toString('base64url')
@@ -221,9 +233,7 @@ function hashTrackingToken(token: string) {
 // Short, unique, non-predictable public slug for /p/[slug] tracking links.
 // Format example: EXA-0A1B-cOmUJBAJ (prefix + short entropy + random suffix)
 function createTrackingSlug(): string {
-  const rand1 = randomBytes(2).toString('hex').toUpperCase() // e.g. 0042 style
-  const rand2 = randomBytes(5).toString('base64url').replace(/[-_]/g, '').slice(0, 8)
-  return `EXA-${rand1}-${rand2}`
+  return `EXA-${randomBytes(18).toString('base64url')}`
 }
 
 async function ensureTrackingSlug(
@@ -245,34 +255,29 @@ async function ensureTrackingSlug(
   // Generate unique slug (retry on rare collision)
   for (let attempt = 0; attempt < 5; attempt++) {
     const slug = createTrackingSlug()
-    const { data: conflict } = await supabase
-      .from('pedidos')
-      .select('id')
-      .eq('slug_acompanhamento', slug)
-      .maybeSingle()
-
-    if (conflict) continue
-
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('pedidos')
       .update({ slug_acompanhamento: slug })
       .eq('id', pedidoId)
       .eq('ativo', true)
+      .is('slug_acompanhamento', null)
+      .select('slug_acompanhamento')
+      .maybeSingle()
 
-    if (!error) {
-      return slug
+    if (!error && data?.slug_acompanhamento) {
+      return data.slug_acompanhamento
     }
+
+    const { data: refreshed } = await supabase
+      .from('pedidos')
+      .select('slug_acompanhamento')
+      .eq('id', pedidoId)
+      .eq('ativo', true)
+      .maybeSingle()
+    if (refreshed?.slug_acompanhamento) return refreshed.slug_acompanhamento
   }
 
-  // Fallback (still unique enough for this use case)
-  const fallback = `EXA-${pedidoId.replace(/-/g, '').slice(0, 8).toUpperCase()}`
-  await supabase
-    .from('pedidos')
-    .update({ slug_acompanhamento: fallback })
-    .eq('id', pedidoId)
-    .eq('ativo', true)
-  // Intentionally ignore errors on fallback slug persistence (extremely rare)
-  return fallback
+  throw new Error('Unable to generate a unique tracking slug')
 }
 
 function normalizeWhatsAppPhone(value: string | null | undefined) {
@@ -340,10 +345,31 @@ async function getRequestBaseUrl() {
 
 function validatePedidoBasico(clienteNome: string, prazoEntrega?: string | null) {
   if (!clienteNome.trim() || clienteNome.length > 120) return 'Nome do cliente invalido'
-  if (prazoEntrega && Number.isNaN(Date.parse(prazoEntrega))) {
+  if (prazoEntrega && !isValidDateOnly(prazoEntrega)) {
     return 'Prazo de entrega invalido'
   }
   return null
+}
+
+function validatePedidoItems(itens: ItemInput[]) {
+  if (!Array.isArray(itens) || itens.length < 1 || itens.length > MAX_PEDIDO_ITEMS) {
+    return false
+  }
+
+  return itens.every(
+    (item) =>
+      isValidUuid(item.produto_id) &&
+      Number.isInteger(item.quantidade) &&
+      isFiniteNumberInRange(item.quantidade, 1, 10_000) &&
+      isFiniteNumberInRange(item.valor_unitario, 0, 9_999_999_999) &&
+      (!item.materiais ||
+        (item.materiais.length <= MAX_PEDIDO_COMPONENTS &&
+          item.materiais.every(
+            (material) =>
+              isValidUuid(material.material_id) &&
+              isFiniteNumberInRange(material.quantidade, 0.001, 100_000)
+          )))
+  )
 }
 
 export async function createPedido(
@@ -352,19 +378,26 @@ export async function createPedido(
 ) {
   const supabase = await createAuthenticatedClient()
 
-  const cliente_nome = formData.get('cliente_nome') as string
-  const cliente_contato = formData.get('cliente_contato') as string
-  const prazo_entrega = formData.get('prazo_entrega') as string
+  const cliente_nome = String(formData.get('cliente_nome') ?? '')
+  const cliente_contato = String(formData.get('cliente_contato') ?? '')
+  const prazo_entrega = String(formData.get('prazo_entrega') ?? '')
   const prioridade = parseInt(formData.get('prioridade') as string) || 1
-  const observacoes = formData.get('observacoes') as string
+  const observacoes = String(formData.get('observacoes') ?? '')
   const observacao_cliente = cleanOptionalText(formData.get('observacao_cliente'))
   const validationError = validatePedidoBasico(cliente_nome, prazo_entrega)
 
-  if (validationError) {
-    return { success: false, error: validationError }
+  if (
+    validationError ||
+    cliente_contato.length > 80 ||
+    observacoes.length > 3000 ||
+    !Number.isInteger(prioridade) ||
+    prioridade < 1 ||
+    prioridade > 5
+  ) {
+    return { success: false, error: validationError || 'Dados do pedido invalidos' }
   }
 
-  if (itens.some((item) => item.quantidade <= 0 || item.quantidade > 10000 || item.valor_unitario < 0)) {
+  if (!validatePedidoItems(itens)) {
     return { success: false, error: 'Itens do pedido invalidos' }
   }
 
@@ -384,7 +417,7 @@ export async function createPedido(
 
   if (error || !pedidoId) {
     logServerError('pedidos_create_atomic_failed', error, { table: 'pedidos' })
-    return { success: false, error: error?.message || 'Erro ao criar pedido' }
+    return { success: false, error: 'Nao foi possivel criar o pedido' }
   }
 
   revalidatePath('/dashboard/pedidos')
@@ -397,21 +430,32 @@ export async function updatePedido(
   formData: FormData,
   itens: ItemInput[]
 ) {
+  if (!isValidUuid(id)) {
+    return { success: false, error: 'Pedido invalido' }
+  }
+
   const supabase = await createAuthenticatedClient()
 
-  const cliente_nome = formData.get('cliente_nome') as string
-  const cliente_contato = formData.get('cliente_contato') as string
-  const prazo_entrega = formData.get('prazo_entrega') as string
+  const cliente_nome = String(formData.get('cliente_nome') ?? '')
+  const cliente_contato = String(formData.get('cliente_contato') ?? '')
+  const prazo_entrega = String(formData.get('prazo_entrega') ?? '')
   const prioridade = parseInt(formData.get('prioridade') as string) || 1
-  const observacoes = formData.get('observacoes') as string
+  const observacoes = String(formData.get('observacoes') ?? '')
   const observacao_cliente = cleanOptionalText(formData.get('observacao_cliente'))
   const validationError = validatePedidoBasico(cliente_nome, prazo_entrega)
 
-  if (validationError) {
-    return { success: false, error: validationError }
+  if (
+    validationError ||
+    cliente_contato.length > 80 ||
+    observacoes.length > 3000 ||
+    !Number.isInteger(prioridade) ||
+    prioridade < 1 ||
+    prioridade > 5
+  ) {
+    return { success: false, error: validationError || 'Dados do pedido invalidos' }
   }
 
-  if (itens.some((item) => item.quantidade <= 0 || item.quantidade > 10000 || item.valor_unitario < 0)) {
+  if (!validatePedidoItems(itens)) {
     return { success: false, error: 'Itens do pedido invalidos' }
   }
 
@@ -431,7 +475,7 @@ export async function updatePedido(
 
   if (error) {
     logServerError('pedidos_update_atomic_failed', error, { table: 'pedidos' })
-    return { success: false, error: error.message }
+    return { success: false, error: 'Nao foi possivel atualizar o pedido' }
   }
 
   revalidatePath('/dashboard/pedidos')
@@ -443,8 +487,11 @@ export async function updatePedidoObservacaoCliente(
   id: string,
   observacaoCliente: string
 ) {
-  if (!uuidRegex.test(id)) {
+  if (!isValidUuid(id)) {
     return { success: false, error: 'Pedido invalido' }
+  }
+  if (observacaoCliente.trim().length > 1200) {
+    return { success: false, error: 'Observacao excede 1200 caracteres' }
   }
 
   const supabase = await createAuthenticatedClient()
@@ -457,8 +504,8 @@ export async function updatePedidoObservacaoCliente(
     .eq('ativo', true)
 
   if (error) {
-    console.error('Error updating customer note:', error)
-    return { success: false, error: error.message }
+    logServerError('pedidos_update_customer_note_failed', error, { table: 'pedidos' })
+    return { success: false, error: 'Nao foi possivel atualizar a observacao' }
   }
 
   revalidatePath('/dashboard/pedidos')
@@ -469,21 +516,22 @@ export async function updatePedidoObservacaoCliente(
 }
 
 export async function updatePedidoStatus(id: string, status: StatusPedido) {
-  const supabase = await createAuthenticatedClient()
-
-  if (!statusPermitidos.includes(status)) {
+  if (!isValidUuid(id) || !statusPermitidos.includes(status)) {
     return { success: false, error: 'Status invalido' }
   }
 
-  const { error } = await supabase
+  const supabase = await createAuthenticatedClient()
+  const { data: updated, error } = await supabase
     .from('pedidos')
     .update({ status })
     .eq('id', id)
     .eq('ativo', true)
+    .select('id')
+    .maybeSingle()
 
-  if (error) {
-    console.error('Error updating status:', error)
-    return { success: false, error: error.message }
+  if (error || !updated) {
+    logServerError('pedidos_update_status_failed', error, { table: 'pedidos' })
+    return { success: false, error: 'Nao foi possivel atualizar o status' }
   }
 
   revalidatePath('/dashboard/pedidos')
@@ -495,7 +543,7 @@ export async function updatePedidoStatus(id: string, status: StatusPedido) {
 export async function gerarLinkAcompanhamentoPedido(
   pedidoId: string
 ): Promise<GerarLinkAcompanhamentoResult> {
-  if (!uuidRegex.test(pedidoId)) {
+  if (!isValidUuid(pedidoId)) {
     return { success: false, error: 'Pedido invalido' }
   }
 
@@ -518,21 +566,38 @@ export async function gerarLinkAcompanhamentoPedido(
 
   // Idempotent slug: reuse existing or generate+persist exactly once per pedido.
   // New public links prefer the short /p/[slug] form.
-  const slug = await ensureTrackingSlug(supabase, pedido.id)
+  let slug: string
+  try {
+    slug = await ensureTrackingSlug(supabase, pedido.id)
+  } catch (error) {
+    logServerError('pedido_tracking_slug_failed', error, {
+      table: 'pedidos',
+      pedidoId,
+    })
+    return { success: false, error: 'Nao foi possivel gerar o link' }
+  }
+
+  const expiresAt = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString()
 
   // Legacy token link: create the hash row ONLY if none exists yet.
   // This keeps previously sent /acompanhar/[token] links working (no overwrite of token_hash).
-  const { data: existingLink } = await supabase
+  const { data: existingLink, error: existingLinkError } = await supabase
     .from('pedido_acompanhamento_links')
     .select('id')
     .eq('pedido_id', pedido.id)
     .maybeSingle()
 
+  if (existingLinkError) {
+    logServerError('pedido_tracking_link_lookup_failed', existingLinkError, {
+      table: 'pedido_acompanhamento_links',
+      pedidoId,
+    })
+    return { success: false, error: 'Nao foi possivel consultar o link' }
+  }
+
   if (!existingLink) {
     const token = createTrackingToken()
     const tokenHash = hashTrackingToken(token)
-    const expiresAt = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString()
-
     const { error: linkError } = await supabase
       .from('pedido_acompanhamento_links')
       .insert({
@@ -548,7 +613,24 @@ export async function gerarLinkAcompanhamentoPedido(
         table: 'pedido_acompanhamento_links',
         pedidoId,
       })
-      // Do not fail the whole call — the slug link is still usable.
+      return { success: false, error: 'Nao foi possivel ativar o link' }
+    }
+  } else {
+    const { error: refreshError } = await supabase
+      .from('pedido_acompanhamento_links')
+      .update({
+        ativo: true,
+        last_sent_at: new Date().toISOString(),
+        expires_at: expiresAt,
+      })
+      .eq('id', existingLink.id)
+
+    if (refreshError) {
+      logServerError('pedido_tracking_link_refresh_failed', refreshError, {
+        table: 'pedido_acompanhamento_links',
+        pedidoId,
+      })
+      return { success: false, error: 'Nao foi possivel ativar o link' }
     }
   }
 
@@ -567,7 +649,7 @@ export async function gerarLinkAcompanhamentoPedido(
     trackingUrl,
     whatsappUrl,
     hasClientPhone: Boolean(whatsappPhone),
-    expiresAt: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString(),
+    expiresAt,
   }
 }
 
@@ -604,6 +686,8 @@ async function resolveItemMateriais(
 export async function getMateriaisBaixaPedido(
   pedidoId: string
 ): Promise<MaterialBaixaPreview[]> {
+  if (!isValidUuid(pedidoId)) return []
+
   const supabase = await createAuthenticatedClient()
 
   const { data: itens, error } = await supabase
@@ -621,7 +705,7 @@ export async function getMateriaisBaixaPedido(
     .eq('pedido_id', pedidoId)
 
   if (error || !itens) {
-    console.error('Error fetching order materials:', error)
+    logServerError('pedidos_material_preview_failed', error, { table: 'pedido_itens' })
     return []
   }
 
@@ -696,6 +780,10 @@ export async function getMateriaisBaixaPedido(
 }
 
 export async function deletePedido(id: string) {
+  if (!isValidUuid(id)) {
+    return { success: false, error: 'Pedido invalido' }
+  }
+
   const supabase = await createAuthenticatedClient()
 
   const { error } = await supabase.rpc('arquivar_pedido', {
@@ -704,7 +792,7 @@ export async function deletePedido(id: string) {
 
   if (error) {
     logServerError('pedidos_archive_failed', error, { table: 'pedidos' })
-    return { success: false, error: error.message }
+    return { success: false, error: 'Nao foi possivel arquivar o pedido' }
   }
 
   revalidatePath('/dashboard/pedidos')
@@ -742,6 +830,18 @@ export type VerificacaoProducao = {
 export async function verificarMateriaisProducao(
   itens: { produto_id: string; quantidade: number }[]
 ): Promise<VerificacaoProducao[]> {
+  if (
+    !Array.isArray(itens) ||
+    itens.length > MAX_PEDIDO_ITEMS ||
+    itens.some(
+      (item) =>
+        !isValidUuid(item.produto_id) ||
+        !isFiniteNumberInRange(item.quantidade, 0.001, 10_000)
+    )
+  ) {
+    return []
+  }
+
   const supabase = await createAuthenticatedClient()
   
   // Get all product compositions with materials
@@ -764,7 +864,9 @@ export async function verificarMateriaisProducao(
     .in('id', itens.map(i => i.produto_id))
 
   if (produtosError || !produtos) {
-    console.error('Error fetching products:', produtosError)
+    logServerError('pedidos_production_products_failed', produtosError, {
+      table: 'produtos',
+    })
     return []
   }
 
@@ -832,19 +934,20 @@ export async function verificarMateriaisProducao(
 }
 
 export async function searchClientes(query: string): Promise<ClienteHistorico[]> {
-  if (!query || query.length < 2) return []
+  const normalizedQuery = query.trim().replace(/\s+/g, ' ')
+  if (normalizedQuery.length < 2 || normalizedQuery.length > 80) return []
   
   const supabase = await createAuthenticatedClient()
   
   const { data, error } = await supabase
     .from('pedidos')
     .select('cliente_nome, cliente_contato, valor_total, data_pedido')
-    .ilike('cliente_nome', `%${query}%`)
+    .ilike('cliente_nome', `%${escapePostgrestSearch(normalizedQuery)}%`)
     .order('data_pedido', { ascending: false })
     .limit(50)
 
   if (error || !data) {
-    console.error('Error searching clients:', error)
+    logServerError('pedidos_client_search_failed', error, { table: 'pedidos' })
     return []
   }
 
@@ -889,10 +992,50 @@ export type PedidoCustomizadoInput = {
   margem_percentual?: number
 }
 
+function validatePedidoCustomizadoInput(params: PedidoCustomizadoInput) {
+  if (
+    !isValidUuid(params.categoria_id) ||
+    params.cliente_nome.trim().length < 1 ||
+    params.cliente_nome.trim().length > 120 ||
+    String(params.cliente_telefone ?? '').length > 80 ||
+    String(params.cliente_endereco ?? '').length > 500 ||
+    String(params.observacoes ?? '').length > 3000 ||
+    String(params.observacao_cliente ?? '').length > 1200 ||
+    (Boolean(params.prazo_entrega) && !isValidDateOnly(params.prazo_entrega)) ||
+    !isFiniteNumberInRange(params.quantidade_itens, 1, 10_000) ||
+    !isFiniteNumberInRange(params.margem_percentual ?? 100, 0, 100_000) ||
+    !Array.isArray(params.componentes) ||
+    params.componentes.length < 1 ||
+    params.componentes.length > MAX_PEDIDO_COMPONENTS ||
+    params.componentes.some(
+      (component) =>
+        !isValidUuid(component.material_id) ||
+        !isFiniteNumberInRange(component.quantidade, 0.001, 100_000)
+    )
+  ) {
+    return false
+  }
+
+  return true
+}
+
 export async function addMateriaisAoPedidoItem(
   pedidoItemId: string,
   materiais: PedidoItemMaterialInput[]
 ) {
+  if (
+    !isValidUuid(pedidoItemId) ||
+    !Array.isArray(materiais) ||
+    materiais.length > MAX_PEDIDO_COMPONENTS ||
+    materiais.some(
+      (material) =>
+        !isValidUuid(material.material_id) ||
+        !isFiniteNumberInRange(material.quantidade, 0.001, 100_000)
+    )
+  ) {
+    return { success: false, error: 'Materiais do pedido invalidos' }
+  }
+
   const supabase = await createAuthenticatedClient()
 
   const { error } = await supabase.rpc('substituir_materiais_pedido_item', {
@@ -901,8 +1044,10 @@ export async function addMateriaisAoPedidoItem(
   })
 
   if (error) {
-    console.error('Error adding materials to order item:', error)
-    return { success: false, error: error.message }
+    logServerError('pedidos_replace_item_materials_failed', error, {
+      table: 'pedido_itens_materiais',
+    })
+    return { success: false, error: 'Nao foi possivel atualizar os materiais' }
   }
 
   revalidatePath('/dashboard/pedidos')
@@ -910,6 +1055,8 @@ export async function addMateriaisAoPedidoItem(
 }
 
 export async function getPedidoItemMateriais(pedidoItemId: string) {
+  if (!isValidUuid(pedidoItemId)) return []
+
   const supabase = await createAuthenticatedClient()
 
   const { data, error } = await supabase
@@ -918,7 +1065,9 @@ export async function getPedidoItemMateriais(pedidoItemId: string) {
     .eq('pedido_item_id', pedidoItemId)
 
   if (error) {
-    console.error('Error fetching order item materials:', error)
+    logServerError('pedidos_item_materials_failed', error, {
+      table: 'pedido_itens_materiais',
+    })
     return []
   }
 
@@ -927,7 +1076,7 @@ export async function getPedidoItemMateriais(pedidoItemId: string) {
 
 // Nova função para criar pedido com componentes customizados
 export async function getPedidoParaEdicao(id: string) {
-  if (!uuidRegex.test(id)) {
+  if (!isValidUuid(id)) {
     return { success: false, error: 'Pedido invalido' }
   }
 
@@ -944,6 +1093,10 @@ export async function createPedidoCustomizado(params: PedidoCustomizadoInput) {
   const supabase = await createAuthenticatedClient()
 
   try {
+    if (!validatePedidoCustomizadoInput(params)) {
+      return { success: false, error: 'Dados do pedido invalidos' }
+    }
+
     const quantidadeItens = Math.max(1, params.quantidade_itens || 1)
     const validationError = validatePedidoBasico(params.cliente_nome, params.prazo_entrega)
 
@@ -955,13 +1108,7 @@ export async function createPedidoCustomizado(params: PedidoCustomizadoInput) {
       return { success: false, error: 'Quantidade de itens invalida' }
     }
 
-    const componentesSelecionados = params.componentes.filter(
-      (componente) =>
-        componente.material_id &&
-        Number.isFinite(componente.quantidade) &&
-        componente.quantidade > 0 &&
-        componente.quantidade <= 100000
-    )
+    const componentesSelecionados = params.componentes
 
     if (componentesSelecionados.length === 0) {
       return { success: false, error: 'Adicione pelo menos um componente ao pedido' }
@@ -983,7 +1130,9 @@ export async function createPedidoCustomizado(params: PedidoCustomizadoInput) {
       .eq('ativo', true)
 
     if (materiaisError || !materiaisData) {
-      console.error('Error fetching selected materials:', materiaisError)
+      logServerError('pedidos_selected_materials_failed', materiaisError, {
+        table: 'materiais',
+      })
       return { success: false, error: 'Erro ao carregar materiais selecionados' }
     }
 
@@ -1065,7 +1214,7 @@ export async function createPedidoCustomizado(params: PedidoCustomizadoInput) {
       logServerError('pedidos_create_custom_atomic_failed', pedidoError, {
         table: 'pedidos',
       })
-      return { success: false, error: pedidoError?.message || 'Erro ao criar pedido' }
+      return { success: false, error: 'Nao foi possivel criar o pedido' }
     }
 
     revalidatePath('/dashboard/pedidos')
@@ -1073,20 +1222,24 @@ export async function createPedidoCustomizado(params: PedidoCustomizadoInput) {
     revalidatePath('/dashboard/estoque')
     return { success: true, pedidoId }
   } catch (error) {
-    console.error('Error creating customized order:', error)
+    logServerError('pedidos_create_custom_exception', error)
     return { success: false, error: 'Erro ao criar pedido customizado' }
   }
 }
 
 // Função para trazer dados necessários para o form de pedido
 export async function updatePedidoCustomizado(id: string, params: PedidoCustomizadoInput) {
-  if (!uuidRegex.test(id)) {
+  if (!isValidUuid(id)) {
     return { success: false, error: 'Pedido invalido' }
   }
 
   const supabase = await createAuthenticatedClient()
 
   try {
+    if (!validatePedidoCustomizadoInput(params)) {
+      return { success: false, error: 'Dados do pedido invalidos' }
+    }
+
     const validationError = validatePedidoBasico(params.cliente_nome, params.prazo_entrega)
 
     if (validationError) {
@@ -1121,7 +1274,8 @@ export async function updatePedidoCustomizado(id: string, params: PedidoCustomiz
         .eq('ativo', true)
 
       if (error) {
-        return { success: false, error: error.message }
+        logServerError('pedidos_update_locked_failed', error, { table: 'pedidos' })
+        return { success: false, error: 'Nao foi possivel atualizar o pedido' }
       }
 
       revalidatePath('/dashboard/pedidos')
@@ -1137,13 +1291,7 @@ export async function updatePedidoCustomizado(id: string, params: PedidoCustomiz
       return { success: false, error: 'Quantidade de itens invalida' }
     }
 
-    const componentesSelecionados = params.componentes.filter(
-      (componente) =>
-        componente.material_id &&
-        Number.isFinite(componente.quantidade) &&
-        componente.quantidade > 0 &&
-        componente.quantidade <= 100000
-    )
+    const componentesSelecionados = params.componentes
 
     if (componentesSelecionados.length === 0) {
       return { success: false, error: 'Adicione pelo menos um componente ao pedido' }
@@ -1234,7 +1382,7 @@ export async function updatePedidoCustomizado(id: string, params: PedidoCustomiz
       logServerError('pedidos_update_custom_atomic_failed', pedidoError, {
         table: 'pedidos',
       })
-      return { success: false, error: pedidoError.message }
+      return { success: false, error: 'Nao foi possivel atualizar o pedido' }
     }
 
     revalidatePath('/dashboard/pedidos')
@@ -1244,7 +1392,7 @@ export async function updatePedidoCustomizado(id: string, params: PedidoCustomiz
     revalidatePath('/acompanhar/[token]', 'page')
     return { success: true, lockedMaterials: action === 'materiais_bloqueados' }
   } catch (error) {
-    console.error('Error updating customized order:', error)
+    logServerError('pedidos_update_custom_exception', error)
     return { success: false, error: 'Erro ao editar pedido customizado' }
   }
 }
@@ -1261,7 +1409,9 @@ export async function getCategoriasComComponentes() {
       .order('ordem')
 
     if (catError || !categorias) {
-      console.error('Error fetching categories:', catError)
+      logServerError('pedidos_form_categories_failed', catError, {
+        table: 'categorias_produtos',
+      })
       return { categorias: [], grupos: [], componentes: [], maodeobra: {} }
     }
 
@@ -1273,7 +1423,9 @@ export async function getCategoriasComComponentes() {
       .order('ordem')
 
     if (grupoError) {
-      console.error('Error fetching groups:', grupoError)
+      logServerError('pedidos_form_groups_failed', grupoError, {
+        table: 'grupos_componentes',
+      })
     }
 
     // Get all components with materials
@@ -1284,7 +1436,9 @@ export async function getCategoriasComComponentes() {
       .order('ordem')
 
     if (compError) {
-      console.error('Error fetching components:', compError)
+      logServerError('pedidos_form_components_failed', compError, {
+        table: 'componentes_estoque',
+      })
     }
 
     // Get labor costs
@@ -1304,7 +1458,7 @@ export async function getCategoriasComComponentes() {
       maodeobra,
     }
   } catch (error) {
-    console.error('Error fetching form data:', error)
+    logServerError('pedidos_form_data_exception', error)
     return { categorias: [], grupos: [], componentes: [], maodeobra: {} }
   }
 }
