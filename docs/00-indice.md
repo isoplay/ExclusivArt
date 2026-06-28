@@ -10,6 +10,7 @@ Use esta pasta como base do Obsidian para a documentacao do projeto.
 4. [CHANGELIST.md](CHANGELIST.md) - historico das alteracoes feitas no projeto.
 5. [TESTES.md](TESTES.md) - roteiro de validacao manual.
 6. [TROUBLESHOOTING.md](TROUBLESHOOTING.md) - erros comuns e solucoes.
+7. [ORCAMENTOS.md](ORCAMENTOS.md) - arquitetura, seguranca e validacao dos orcamentos livres.
 
 ## Observacoes
 
