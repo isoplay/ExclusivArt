@@ -97,8 +97,11 @@ Crie um arquivo `.env.local` com:
 ```
 NEXT_PUBLIC_SUPABASE_URL=seu_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=sua_chave
-SUPABASE_SERVICE_ROLE_KEY=sua_service_role_key
+NEXT_PUBLIC_SITE_URL=https://seu-dominio.com.br
 ```
+
+O aplicativo não utiliza `SUPABASE_SERVICE_ROLE_KEY`. Não configure nem exponha
+essa chave no frontend.
 
 ### 3️⃣ Começar a Usar
 

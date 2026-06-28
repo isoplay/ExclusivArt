@@ -11,6 +11,7 @@ next.user-config.*
 .env*.local
 .env
 .env.*
+!.env.example
 
 # AI / Agents / Codex / Graphify
 .agents/
