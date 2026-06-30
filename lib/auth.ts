@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
+import { cache } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { isInvalidRefreshTokenError, isSupabaseAuthCookie } from '@/lib/supabase/auth-errors'
 import { createClient } from '@/lib/supabase/server'
@@ -47,7 +48,7 @@ async function redirectToLoginAfterAuthError(error?: unknown) {
   redirect('/login')
 }
 
-async function getAuthenticatedSession() {
+const getAuthenticatedSession = cache(async () => {
   const supabase = await createClient()
   let user: User | null = null
   let authError: unknown = null
@@ -66,7 +67,7 @@ async function getAuthenticatedSession() {
   }
 
   return { supabase, user }
-}
+})
 
 export async function createAuthenticatedClient() {
   const { supabase } = await getAuthenticatedSession()

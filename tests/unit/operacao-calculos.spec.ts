@@ -1,10 +1,30 @@
 import { expect, test } from '@playwright/test'
 import {
+  buildOrderMaterialDemand,
   buildStockAlerts,
   calculatePricing,
   getDaysUntil,
   getEstoqueAtual,
 } from '../../lib/operacao-calculos'
+
+test('agrega demanda em lote e prioriza materiais personalizados', () => {
+  expect(
+    buildOrderMaterialDemand([
+      {
+        quantidade: 3,
+        materiais_personalizados: [{ material_id: 'mat-custom', quantidade: 5 }],
+        materiais_produto: [{ material_id: 'mat-padrao', quantidade: 2 }],
+      },
+      {
+        quantidade: 2,
+        materiais_produto: [{ material_id: 'mat-padrao', quantidade: 2 }],
+      },
+    ])
+  ).toEqual([
+    { material_id: 'mat-custom', quantidade: 5 },
+    { material_id: 'mat-padrao', quantidade: 4 },
+  ])
+})
 
 test('calcula estoque atual usando quantidade_atual quando existir', () => {
   expect(

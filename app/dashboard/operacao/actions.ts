@@ -3,6 +3,7 @@
 import { createAuthenticatedClient } from '@/lib/auth'
 import { logServerError } from '@/lib/server-log'
 import {
+  buildOrderMaterialDemand,
   buildStockAlerts,
   calculatePricing,
   getDaysUntil,
@@ -18,7 +19,6 @@ import type {
   ProdutoComMateriais,
   StatusPedido,
 } from '@/lib/types/database'
-import { getMateriaisBaixaPedido } from '../pedidos/actions'
 
 type MovimentoComMaterial = MovimentacaoEstoque & {
   material?: Pick<Material, 'nome' | 'unidade' | 'tipo'> | Pick<Material, 'nome' | 'unidade' | 'tipo'>[] | null
@@ -117,21 +117,70 @@ function buildPricing(produtos: ProdutoComMateriais[]) {
   })
 }
 
-async function getOpenOrderDemand(pedidos: PedidoComItens[]) {
-  const demandas: MaterialDemandInput[] = []
+async function getOpenOrderDemand(
+  supabase: Awaited<ReturnType<typeof createAuthenticatedClient>>,
+  pedidos: PedidoComItens[]
+) {
   const pedidosAnalise = pedidos.filter((pedido) => pedido.status !== 'cancelado').slice(0, 25)
+  const itens = pedidosAnalise.flatMap((pedido) => pedido.pedido_itens ?? [])
+  const itemIds = [...new Set(itens.map((item) => item.id).filter(Boolean))]
+  const produtoIds = [...new Set(itens.map((item) => item.produto_id).filter(Boolean))]
 
-  for (const pedido of pedidosAnalise) {
-    const materiais = await getMateriaisBaixaPedido(pedido.id)
-    materiais.forEach((material) => {
-      demandas.push({
-        material_id: material.material_id,
-        quantidade: material.quantidade,
-      })
+  if (itemIds.length === 0) {
+    return []
+  }
+
+  const [personalizadosResult, produtosResult] = await Promise.all([
+    supabase
+      .from('pedido_itens_materiais')
+      .select('pedido_item_id, material_id, quantidade')
+      .in('pedido_item_id', itemIds),
+    produtoIds.length > 0
+      ? supabase
+          .from('produto_materiais')
+          .select('produto_id, material_id, quantidade_usada')
+          .in('produto_id', produtoIds)
+      : Promise.resolve({ data: [], error: null }),
+  ])
+
+  if (personalizadosResult.error) {
+    logServerError('operacao_materiais_personalizados_failed', personalizadosResult.error, {
+      table: 'pedido_itens_materiais',
+    })
+  }
+  if (produtosResult.error) {
+    logServerError('operacao_materiais_produtos_failed', produtosResult.error, {
+      table: 'produto_materiais',
     })
   }
 
-  return demandas
+  const personalizadosPorItem = new Map<string, MaterialDemandInput[]>()
+  for (const material of personalizadosResult.data ?? []) {
+    const lista = personalizadosPorItem.get(material.pedido_item_id) ?? []
+    lista.push({
+      material_id: material.material_id,
+      quantidade: toNumber(material.quantidade),
+    })
+    personalizadosPorItem.set(material.pedido_item_id, lista)
+  }
+
+  const materiaisPorProduto = new Map<string, MaterialDemandInput[]>()
+  for (const material of produtosResult.data ?? []) {
+    const lista = materiaisPorProduto.get(material.produto_id) ?? []
+    lista.push({
+      material_id: material.material_id,
+      quantidade: toNumber(material.quantidade_usada),
+    })
+    materiaisPorProduto.set(material.produto_id, lista)
+  }
+
+  return buildOrderMaterialDemand(
+    itens.map((item) => ({
+      quantidade: toNumber(item.quantidade),
+      materiais_personalizados: personalizadosPorItem.get(item.id),
+      materiais_produto: materiaisPorProduto.get(item.produto_id),
+    }))
+  )
 }
 
 export async function getOperacaoData() {
@@ -154,6 +203,7 @@ export async function getOperacaoData() {
           *,
           pedido_itens (
             id,
+            produto_id,
             quantidade,
             valor_unitario,
             valor_total,
@@ -215,7 +265,7 @@ export async function getOperacaoData() {
     const pedidosMes = (pedidosMesResult.data ?? []) as Pedido[]
     const despesasMes = (despesasMesResult.data ?? []) as Despesa[]
     const produtos = (produtosResult.data ?? []) as ProdutoComMateriais[]
-    const demandas = await getOpenOrderDemand(pedidos)
+    const demandas = await getOpenOrderDemand(supabase, pedidos)
     const alertasEstoque = buildStockAlerts(materiais, demandas)
     const financeiro = summarizeFinance(pedidosMes, despesasMes)
 

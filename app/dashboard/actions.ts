@@ -3,9 +3,9 @@
 import { createAuthenticatedClient } from '@/lib/auth'
 import {
   STATUS_PEDIDO_OPTIONS,
-  type Despesa,
   type Material,
   type Pedido,
+  type StatusPedido,
 } from '@/lib/types/database'
 import { logServerError } from '@/lib/server-log'
 
@@ -35,8 +35,24 @@ const EMPTY_DASHBOARD_METRICS = {
   materiaisLowStock: [],
 }
 
-function getEstoqueAtual(material: Material) {
-  return toNumber(material.quantidade_atual ?? material.quantidade)
+type DashboardMetricsRpc = {
+  total_pedidos_mes?: unknown
+  receita_mes?: unknown
+  receita_pedidos_sistema?: unknown
+  receita_historica?: unknown
+  pedidos_pendentes?: unknown
+  materiais_sem_estoque?: unknown
+  materiais_baixo_estoque?: unknown
+  despesas_total_mes?: unknown
+  pedidos_por_status?: Array<{ status?: unknown; total?: unknown }>
+  financeiro_ultimos_dias?: Array<{
+    data?: unknown
+    receita?: unknown
+    despesas?: unknown
+  }>
+  pedidos_recentes?: Pedido[]
+  proximas_entregas?: Pedido[]
+  materiais_low_stock?: Material[]
 }
 
 function toNumber(value: unknown) {
@@ -44,267 +60,66 @@ function toNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
-function toDateKey(value: unknown) {
-  return String(value ?? '').split('T')[0]
+function getDayLabel(value: unknown) {
+  const date = new Date(`${String(value ?? '')}T00:00:00Z`)
+  if (Number.isNaN(date.getTime())) return ''
+
+  return ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'][date.getUTCDay()]
+}
+
+function isStatusPedido(value: unknown): value is StatusPedido {
+  return STATUS_PEDIDO_OPTIONS.some((option) => option.value === value)
 }
 
 export async function getDashboardMetrics() {
   const supabase = await createAuthenticatedClient()
+  const { data, error } = await supabase.rpc('get_dashboard_metrics')
 
-  const now = new Date()
-  const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-  const lastDayOfMonth = new Date(
-    now.getFullYear(),
-    now.getMonth() + 1,
-    0,
-    23,
-    59,
-    59,
-    999
-  ).toISOString()
-  const inSevenDays = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .split('T')[0]
-  const lastSevenDays = Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(now)
-    date.setDate(now.getDate() - (6 - index))
-    date.setHours(0, 0, 0, 0)
-    return date
-  })
-  const sevenDaysAgo = lastSevenDays[0].toISOString()
-
-  const results = await Promise.all([
-    supabase
-      .from('pedidos')
-      .select('*')
-      .eq('ativo', true)
-      .gte('data_pedido', firstDayOfMonth)
-      .lte('data_pedido', lastDayOfMonth),
-
-    supabase
-      .from('pedidos')
-      .select('valor_total,status')
-      .eq('ativo', true)
-      .in('status', ['pronto', 'entregue']),
-
-    supabase
-      .from('vendas_historicas')
-      .select('valor_total'),
-
-    supabase
-      .from('pedidos')
-      .select('*')
-      .eq('ativo', true)
-      .in('status', ['orcamento', 'confirmado', 'em_producao', 'pronto']),
-
-    supabase
-      .from('materiais')
-      .select('*')
-      .eq('ativo', true),
-
-    supabase
-      .from('despesas')
-      .select('*')
-      .eq('ativo', true)
-      .is('deleted_at', null)
-      .gte('data', firstDayOfMonth)
-      .lte('data', lastDayOfMonth),
-
-    supabase
-      .from('pedidos')
-      .select('*')
-      .eq('ativo', true)
-      .order('data_pedido', { ascending: false })
-      .limit(5),
-
-    supabase
-      .from('pedidos')
-      .select('*')
-      .eq('ativo', true)
-      .in('status', ['orcamento', 'confirmado', 'em_producao', 'pronto'])
-      .not('prazo_entrega', 'is', null)
-      .lte('prazo_entrega', inSevenDays)
-      .gte('prazo_entrega', now.toISOString().split('T')[0])
-      .order('prazo_entrega', { ascending: true })
-      .limit(7),
-
-    supabase
-      .from('pedidos')
-      .select('*')
-      .eq('ativo', true)
-      .gte('data_pedido', sevenDaysAgo),
-
-    supabase
-      .from('despesas')
-      .select('*')
-      .eq('ativo', true)
-      .is('deleted_at', null)
-      .gte('data', sevenDaysAgo.split('T')[0]),
-  ]).catch((error) => {
-    logServerError('dashboard_metrics_exception', error)
-    return null
-  })
-
-  if (!results) {
+  if (error || !data || typeof data !== 'object' || Array.isArray(data)) {
+    logServerError('dashboard_metrics_rpc_failed', error ?? new Error('Resposta RPC invalida'), {
+      function: 'get_dashboard_metrics',
+    })
     return EMPTY_DASHBOARD_METRICS
   }
 
-  const [
-    pedidosMesResult,
-    todosPedidosReceitaResult,
-    vendasHistoricasResult,
-    pedidosPendentesResult,
-    todosMateriaisResult,
-    despesasMesResult,
-    pedidosRecentesResult,
-    proximosEntregasResult,
-    pedidosUltimosDiasResult,
-    despesasUltimosDiasResult,
-  ] = results
+  const metrics = data as unknown as DashboardMetricsRpc
+  const statusTotals = new Map<StatusPedido, number>()
 
-  const { data: pedidosMes, error: pedidosError } = pedidosMesResult
-
-  if (pedidosError) {
-    logServerError('dashboard_pedidos_mes_failed', pedidosError, { table: 'pedidos' })
-  }
-
-  const { data: todosPedidosReceita, error: todosPedidosReceitaError } = todosPedidosReceitaResult
-
-  if (todosPedidosReceitaError) {
-    logServerError('dashboard_todos_pedidos_receita_failed', todosPedidosReceitaError, {
-      table: 'pedidos',
-    })
-  }
-
-  const { data: vendasHistoricas, error: vendasHistoricasError } = vendasHistoricasResult
-
-  if (vendasHistoricasError) {
-    logServerError('dashboard_vendas_historicas_failed', vendasHistoricasError, {
-      table: 'vendas_historicas',
-    })
-  }
-
-  const { data: pedidosPendentes, error: pendentesError } = pedidosPendentesResult
-
-  if (pendentesError) {
-    logServerError('dashboard_pedidos_pendentes_failed', pendentesError, { table: 'pedidos' })
-  }
-
-  const { data: todosMateriais, error: materiaisError } = todosMateriaisResult
-
-  if (materiaisError) {
-    logServerError('dashboard_materiais_failed', materiaisError, { table: 'materiais' })
-  }
-
-  const materiaisLowStock =
-    todosMateriais?.filter((m: Material) => {
-      const atual = getEstoqueAtual(m)
-      const minimo = m.quantidade_minima ?? 30
-      return atual <= minimo
-    }) || []
-  const materiaisSemEstoque =
-    todosMateriais?.filter((m: Material) => getEstoqueAtual(m) <= 0) || []
-
-  const { data: despesasMes, error: despesasError } = despesasMesResult
-
-  if (despesasError) {
-    logServerError('dashboard_despesas_mes_failed', despesasError, { table: 'despesas' })
-  }
-
-  const receitaMes = (pedidosMes || []).reduce((acc: number, p: Pedido) => {
-    if (p.status === 'pronto' || p.status === 'entregue') {
-      return acc + toNumber(p.valor_total)
+  for (const item of metrics.pedidos_por_status ?? []) {
+    if (isStatusPedido(item.status)) {
+      statusTotals.set(item.status, toNumber(item.total))
     }
-    return acc
-  }, 0)
-  const receitaPedidosSistema = (todosPedidosReceita || []).reduce(
-    (acc: number, pedido: Pick<Pedido, 'valor_total' | 'status'>) => {
-      return acc + toNumber(pedido.valor_total)
-    },
-    0
-  )
-  const receitaHistorica = (vendasHistoricas || []).reduce(
-    (acc: number, venda: { valor_total: unknown }) => acc + toNumber(venda.valor_total),
-    0
-  )
-
-  const despesasTotalMes = (despesasMes || []).reduce(
-    (acc: number, d: Despesa) => acc + toNumber(d.valor),
-    0
-  )
-
-  const pedidosPorStatus = STATUS_PEDIDO_OPTIONS.map((statusOption) => ({
-    status: statusOption.value,
-    label: statusOption.label,
-    className: statusOption.className,
-    total: (pedidosMes || []).filter((pedido: Pedido) => pedido.status === statusOption.value)
-      .length,
-  })).filter((status) => status.total > 0)
-
-  const { data: pedidosRecentes, error: pedidosRecentesError } = pedidosRecentesResult
-  const { data: proximosEntregas, error: proximosEntregasError } = proximosEntregasResult
-  const { data: pedidosUltimosDias, error: pedidosUltimosDiasError } = pedidosUltimosDiasResult
-  const { data: despesasUltimosDias, error: despesasUltimosDiasError } = despesasUltimosDiasResult
-
-  if (pedidosRecentesError) {
-    logServerError('dashboard_pedidos_recentes_failed', pedidosRecentesError, { table: 'pedidos' })
   }
 
-  if (proximosEntregasError) {
-    logServerError('dashboard_proximas_entregas_failed', proximosEntregasError, { table: 'pedidos' })
-  }
-
-  if (pedidosUltimosDiasError) {
-    logServerError('dashboard_pedidos_ultimos_dias_failed', pedidosUltimosDiasError, { table: 'pedidos' })
-  }
-
-  if (despesasUltimosDiasError) {
-    logServerError('dashboard_despesas_ultimos_dias_failed', despesasUltimosDiasError, { table: 'despesas' })
-  }
-
-  const labels = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab']
-  const financeiroUltimosDias = lastSevenDays.map((day) => {
-    const key = day.toISOString().split('T')[0]
-    const receita = (pedidosUltimosDias || []).reduce((acc: number, pedido: Pedido) => {
-      if (
-        !['pronto', 'entregue'].includes(pedido.status) ||
-        toDateKey(pedido.data_pedido) !== key
-      ) {
-        return acc
-      }
-
-      return acc + toNumber(pedido.valor_total)
-    }, 0)
-    const despesas = (despesasUltimosDias || []).reduce((acc: number, despesa: Despesa) => {
-      if (toDateKey(despesa.data) !== key) {
-        return acc
-      }
-
-      return acc + toNumber(despesa.valor)
-    }, 0)
-
-    return {
-      dia: labels[day.getDay()],
-      receita,
-      despesas,
-    }
-  })
+  const receitaMes = toNumber(metrics.receita_mes)
+  const receitaPedidosSistema = toNumber(metrics.receita_pedidos_sistema)
+  const receitaHistorica = toNumber(metrics.receita_historica)
+  const despesasTotalMes = toNumber(metrics.despesas_total_mes)
 
   return {
-    totalPedidosMes: pedidosMes?.length || 0,
+    totalPedidosMes: toNumber(metrics.total_pedidos_mes),
     receitaMes,
     receitaPedidosSistema,
     receitaHistorica,
     totalVendidoDesdeInicio: receitaPedidosSistema + receitaHistorica,
-    pedidosPendentes: pedidosPendentes?.length || 0,
-    materiaisSemEstoque: materiaisSemEstoque.length,
-    materiaisBaixoEstoque: materiaisLowStock.length,
+    pedidosPendentes: toNumber(metrics.pedidos_pendentes),
+    materiaisSemEstoque: toNumber(metrics.materiais_sem_estoque),
+    materiaisBaixoEstoque: toNumber(metrics.materiais_baixo_estoque),
     despesasTotalMes,
     lucroMes: receitaMes - despesasTotalMes,
-    pedidosPorStatus,
-    financeiroUltimosDias,
-    pedidosRecentes: pedidosRecentes || [],
-    proximosEntregas: proximosEntregas || [],
-    materiaisLowStock: materiaisLowStock.slice(0, 5),
+    pedidosPorStatus: STATUS_PEDIDO_OPTIONS.map((option) => ({
+      status: option.value,
+      label: option.label,
+      className: option.className,
+      total: statusTotals.get(option.value) ?? 0,
+    })).filter((item) => item.total > 0),
+    financeiroUltimosDias: (metrics.financeiro_ultimos_dias ?? []).map((item) => ({
+      dia: getDayLabel(item.data),
+      receita: toNumber(item.receita),
+      despesas: toNumber(item.despesas),
+    })),
+    pedidosRecentes: metrics.pedidos_recentes ?? [],
+    proximosEntregas: metrics.proximas_entregas ?? [],
+    materiaisLowStock: metrics.materiais_low_stock ?? [],
   }
 }

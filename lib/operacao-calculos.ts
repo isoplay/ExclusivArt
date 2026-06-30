@@ -14,6 +14,12 @@ export type MaterialDemandInput = {
   quantidade: number
 }
 
+export type OrderItemDemandInput = {
+  quantidade: number
+  materiais_personalizados?: MaterialDemandInput[]
+  materiais_produto?: MaterialDemandInput[]
+}
+
 export type StockAlert = {
   material_id: string
   nome: string
@@ -53,6 +59,32 @@ export function toNumber(value: unknown) {
 
 export function getEstoqueAtual(material: MaterialStockInput) {
   return toNumber(material.quantidade_atual ?? material.quantidade)
+}
+
+export function buildOrderMaterialDemand(itens: OrderItemDemandInput[]) {
+  const demandaPorMaterial = new Map<string, number>()
+
+  itens.forEach((item) => {
+    const materiais = item.materiais_personalizados?.length
+      ? item.materiais_personalizados
+      : (item.materiais_produto ?? []).map((material) => ({
+          material_id: material.material_id,
+          quantidade: toNumber(material.quantidade) * toNumber(item.quantidade),
+        }))
+
+    materiais.forEach((material) => {
+      if (!material.material_id) return
+      demandaPorMaterial.set(
+        material.material_id,
+        (demandaPorMaterial.get(material.material_id) ?? 0) + toNumber(material.quantidade)
+      )
+    })
+  })
+
+  return Array.from(demandaPorMaterial, ([material_id, quantidade]) => ({
+    material_id,
+    quantidade,
+  }))
 }
 
 export function normalizePercent(value: number) {
