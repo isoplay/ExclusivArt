@@ -242,7 +242,8 @@ export type Despesa = {
   valor: number
   categoria: CategoriaDespesa
   data: string
-  data_pedido: string
+  data_pedido?: string
+  created_at?: string
 }
 
 export type VendaHistorica = {

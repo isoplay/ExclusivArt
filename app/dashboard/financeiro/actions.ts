@@ -61,7 +61,7 @@ export async function getDespesas(mes?: number, ano?: number) {
   try {
     let query = supabase
       .from('despesas')
-      .select('id, descricao, valor, categoria, data, data_pedido')
+      .select('id, descricao, valor, categoria, data')
       .eq('ativo', true)
       .is('deleted_at', null)
       .order('data', { ascending: false })
@@ -223,7 +223,7 @@ export async function getFinanceiroResumo(mes: number, ano: number) {
       .lt('data_pedido', endExclusiveIso),
     supabase
       .from('despesas')
-      .select('id, descricao, valor, categoria, data, data_pedido')
+      .select('id, descricao, valor, categoria, data')
       .eq('ativo', true)
       .is('deleted_at', null)
       .gte('data', startDateOnly)
