@@ -1,7 +1,11 @@
 import { expect, test } from '@playwright/test'
-import { getCanonicalMaterialType, MATERIAL_TYPES } from '../../lib/material-types'
+import {
+  getCanonicalMaterialType,
+  isColorDrivenMaterialType,
+  MATERIAL_TYPES,
+} from '../../lib/material-types'
 
-test('mantem apenas os seis tipos de materiais permitidos', () => {
+test('mantem os seis tipos padrao disponiveis', () => {
   expect(MATERIAL_TYPES.map((tipo) => tipo.nome)).toEqual([
     'Contas',
     'Entremeio',
@@ -12,14 +16,22 @@ test('mantem apenas os seis tipos de materiais permitidos', () => {
   ])
 })
 
-test('normaliza os tipos detalhados antigos sem perder a classificacao principal', () => {
-  expect(getCanonicalMaterialType('CONTAS LEITOSAS')).toBe('Contas')
-  expect(getCanonicalMaterialType('CONTAS CRAQUELADAS')).toBe('Contas')
-  expect(getCanonicalMaterialType('CONTA EMBORRACHADA')).toBe('Contas')
+test('preserva tipos detalhados de contas', () => {
+  expect(getCanonicalMaterialType('  Contas   leitosas  ')).toBe('Contas leitosas')
+  expect(getCanonicalMaterialType('Contas craqueladas')).toBe('Contas craqueladas')
+  expect(getCanonicalMaterialType('Conta emborrachada')).toBe('Conta emborrachada')
   expect(getCanonicalMaterialType('LINHA')).toBe('Linhas')
   expect(getCanonicalMaterialType('EMBALAGEM')).toBe('Embalagem')
 })
 
-test('rejeita tipos fora da lista padronizada', () => {
-  expect(getCanonicalMaterialType('Tipo inventado')).toBeNull()
+test('permite tipos personalizados validos', () => {
+  expect(getCanonicalMaterialType('Pedras naturais')).toBe('Pedras naturais')
+  expect(getCanonicalMaterialType('')).toBeNull()
+})
+
+test('usa cor em qualquer tipo de conta', () => {
+  expect(isColorDrivenMaterialType('Contas')).toBe(true)
+  expect(isColorDrivenMaterialType('Contas craqueladas')).toBe(true)
+  expect(isColorDrivenMaterialType('Conta leitosa')).toBe(true)
+  expect(isColorDrivenMaterialType('Entremeio')).toBe(false)
 })

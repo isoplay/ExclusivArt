@@ -2,7 +2,11 @@
 
 import { revalidatePath } from 'next/cache'
 import { createAuthenticatedClient } from '@/lib/auth'
-import { getCanonicalMaterialType, MATERIAL_TYPES } from '@/lib/material-types'
+import {
+  getCanonicalMaterialType,
+  isStandardMaterialType,
+  MATERIAL_TYPES,
+} from '@/lib/material-types'
 import { logServerError } from '@/lib/server-log'
 import type { TipoComponenteConfig } from '@/lib/types/database'
 
@@ -68,7 +72,8 @@ export async function getTiposComponentesConfig(): Promise<TipoComponenteConfig[
     ;(materiais || []).forEach((material) => {
       const tipo = getCanonicalMaterialType(material.tipo)
       if (!tipo) return
-      materialCount.set(tipo, (materialCount.get(tipo) || 0) + 1)
+      const key = normalizeKey(tipo)
+      materialCount.set(key, (materialCount.get(key) || 0) + 1)
     })
 
     const grouped = new Map<string, TipoComponenteConfig>(
@@ -79,7 +84,7 @@ export async function getTiposComponentesConfig(): Promise<TipoComponenteConfig[
           ativo: false,
           total_grupos: 0,
           categorias: [],
-          materiais_vinculados: materialCount.get(tipo.nome) || 0,
+          materiais_vinculados: materialCount.get(normalizeKey(tipo.nome)) || 0,
           ordem: tipo.ordem,
         },
       ])
@@ -101,7 +106,7 @@ export async function getTiposComponentesConfig(): Promise<TipoComponenteConfig[
           ativo: false,
           total_grupos: 0,
           categorias: [] as string[],
-          materiais_vinculados: materialCount.get(nome) || 0,
+          materiais_vinculados: materialCount.get(normalizeKey(nome)) || 0,
           ordem: grupo.ordem ?? 999,
         } satisfies TipoComponenteConfig)
 
@@ -133,7 +138,7 @@ export async function criarTipoComponente(formData: FormData) {
   const nome = getCanonicalMaterialType(formData.get('nome') as string)
 
   if (!nome) {
-    return { success: false, error: 'Use um dos seis tipos padronizados' }
+    return { success: false, error: 'Informe um tipo de componente valido' }
   }
 
   const { data: categorias, error: categoriasError } = await supabase
@@ -153,7 +158,7 @@ export async function criarTipoComponente(formData: FormData) {
 
   const { data: gruposExistentes, error: gruposError } = await supabase
     .from('grupos_componentes')
-    .select('categoria_id, nome, ordem')
+    .select('id, categoria_id, nome, ordem')
 
   if (gruposError) {
     logServerError('config_groups_lookup_failed', gruposError, {
@@ -192,10 +197,14 @@ export async function criarTipoComponente(formData: FormData) {
       return { success: false, error: 'Nao foi possivel criar o tipo de componente' }
     }
   } else {
+    const idsExistentes = (gruposExistentes || [])
+      .filter((grupo) => normalizeKey(grupo.nome) === normalizeKey(nome))
+      .map((grupo) => grupo.id)
+
     const { error } = await supabase
       .from('grupos_componentes')
       .update({ ativo: true })
-      .eq('nome', nome)
+      .in('id', idsExistentes)
 
     if (error) {
       logServerError('config_reactivate_component_type_failed', error, {
@@ -210,18 +219,41 @@ export async function criarTipoComponente(formData: FormData) {
 }
 
 export async function renomearTipoComponente(nomeAtual: string, formData: FormData) {
+  const supabase = await createAuthenticatedClient()
   const nome = getCanonicalMaterialType(formData.get('nome') as string)
   const atual = getCanonicalMaterialType(nomeAtual)
 
   if (!nome || !atual) {
-    return { success: false, error: 'Use um dos seis tipos padronizados' }
+    return { success: false, error: 'Informe um tipo de componente valido' }
   }
 
-  if (nome === atual) {
+  if (normalizeKey(nome) === normalizeKey(atual)) {
     return { success: true }
   }
 
-  return { success: false, error: 'Os tipos padronizados não podem ser renomeados' }
+  if (isStandardMaterialType(atual)) {
+    return { success: false, error: 'Os tipos padronizados nao podem ser renomeados' }
+  }
+
+  const { error } = await supabase.rpc('renomear_tipo_componente', {
+    p_nome_atual: atual,
+    p_novo_nome: nome,
+  })
+
+  if (error) {
+    logServerError('config_rename_component_type_failed', error, {
+      tables: ['grupos_componentes', 'materiais'],
+    })
+    return {
+      success: false,
+      error: error.message.includes('tipo_destino_existente')
+        ? 'Ja existe um tipo com esse nome'
+        : 'Nao foi possivel renomear o tipo de componente',
+    }
+  }
+
+  revalidateConfiguracoesDependentes()
+  return { success: true }
 }
 
 export async function alternarTipoComponente(nome: string, ativo: boolean) {
@@ -232,7 +264,7 @@ export async function alternarTipoComponente(nome: string, ativo: boolean) {
     return { success: false, error: 'Tipo de componente inválido' }
   }
 
-  if (!ativo) {
+  if (!ativo && isStandardMaterialType(tipo)) {
     return { success: false, error: 'Os seis tipos padronizados devem permanecer ativos' }
   }
 

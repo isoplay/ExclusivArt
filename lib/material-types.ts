@@ -20,15 +20,15 @@ export function normalizeMaterialTypeKey(value: string | null | undefined) {
 
 export function getCanonicalMaterialType(
   value: string | null | undefined
-): MaterialTypeName | null {
+): string | null {
+  const nome = String(value ?? '').trim().replace(/\s+/g, ' ')
+  if (!nome || nome.length > 60 || /[\u0000-\u001f\u007f]/.test(nome)) {
+    return null
+  }
+
   const key = normalizeMaterialTypeKey(value)
 
-  if (
-    key === 'conta' ||
-    key === 'contas' ||
-    key.startsWith('conta ') ||
-    key.startsWith('contas ')
-  ) {
+  if (key === 'conta' || key === 'contas') {
     return 'Contas'
   }
 
@@ -52,5 +52,14 @@ export function getCanonicalMaterialType(
     return 'Embalagem'
   }
 
-  return null
+  return nome
+}
+
+export function isStandardMaterialType(value: string | null | undefined) {
+  const key = normalizeMaterialTypeKey(value)
+  return MATERIAL_TYPES.some((tipo) => normalizeMaterialTypeKey(tipo.nome) === key)
+}
+
+export function isColorDrivenMaterialType(value: string | null | undefined) {
+  return /^contas?(?:\s|$)/.test(normalizeMaterialTypeKey(value))
 }

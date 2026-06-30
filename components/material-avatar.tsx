@@ -1,5 +1,5 @@
 import { Box, Circle, Cross, Gem, Medal } from 'lucide-react'
-import { getCanonicalMaterialType } from '@/lib/material-types'
+import { isColorDrivenMaterialType } from '@/lib/material-types'
 import { cn } from '@/lib/utils'
 
 type MaterialAvatarProps = {
@@ -16,10 +16,6 @@ function normalizeKey(value: string | null | undefined) {
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-}
-
-function isColorDrivenType(tipo?: string | null) {
-  return getCanonicalMaterialType(tipo) === 'Contas'
 }
 
 function isValidHexColor(color?: string | null) {
@@ -65,7 +61,7 @@ function FallbackIcon({ tipo, nome }: Pick<MaterialAvatarProps, 'tipo' | 'nome'>
     return <span className="text-[10px] font-semibold leading-none">{firstLetter}</span>
   }
 
-  if (isColorDrivenType(tipo)) {
+  if (isColorDrivenMaterialType(tipo)) {
     return <Circle className="h-3 w-3" aria-hidden />
   }
 
@@ -80,7 +76,7 @@ export function MaterialAvatar({
   className,
 }: MaterialAvatarProps) {
   const safeImageUrl = getSafeImageUrl(imageUrl)
-  const canShowColor = isColorDrivenType(tipo) && isValidHexColor(color)
+  const canShowColor = isColorDrivenMaterialType(tipo) && isValidHexColor(color)
 
   if (safeImageUrl) {
     return (

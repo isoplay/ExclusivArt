@@ -101,7 +101,7 @@ export default function ComponentesConfigContent({ tipos }: ComponentesConfigPro
               name="nome"
               value={novoTipo}
               onChange={(event) => setNovoTipo(event.target.value)}
-              placeholder="Ex: Pingente, Medalha, Fecho"
+              placeholder="Ex: Contas craqueladas, Contas leitosas"
               disabled={isPending}
             />
           </div>
