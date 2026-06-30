@@ -63,8 +63,8 @@ export const STATUS_PEDIDO_OPTIONS: {
   { value: 'confirmado', label: 'Confirmado', className: 'bg-amber-100 text-amber-800' },
   { value: 'separando_materiais', label: 'Separando Materiais', className: 'bg-purple-100 text-purple-800' },
   { value: 'em_producao', label: 'Em Produção', className: 'bg-blue-100 text-blue-800' },
-  { value: 'pronto', label: 'Pronto para Entrega', className: 'bg-emerald-100 text-emerald-800' },
-  { value: 'entregue', label: 'Entregue', className: 'bg-green-100 text-green-800' },
+  { value: 'pronto', label: 'Pronto para Entrega', className: 'bg-cyan-100 text-cyan-800' },
+  { value: 'entregue', label: 'Entregue', className: 'bg-emerald-100 text-emerald-800' },
   { value: 'cancelado', label: 'Cancelado', className: 'bg-red-100 text-red-800' },
 ]
 

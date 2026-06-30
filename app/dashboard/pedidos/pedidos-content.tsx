@@ -71,7 +71,7 @@ const STATUS_COLORS: { [key: string]: string } = {
   confirmado: 'bg-blue-100 text-blue-800',
   separando_materiais: 'bg-purple-100 text-purple-800',
   em_producao: 'bg-yellow-100 text-yellow-800',
-  pronto: 'bg-green-100 text-green-800',
+  pronto: 'bg-cyan-100 text-cyan-800',
   entregue: 'bg-emerald-100 text-emerald-800',
   cancelado: 'bg-red-100 text-red-800',
 }
@@ -397,8 +397,8 @@ export function PedidosContent({
             </div>
           ) : (
             <>
-            <div className="hidden overflow-x-auto md:block">
-              <Table>
+            <div className="overflow-x-auto">
+              <Table className="min-w-[720px]">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Cliente</TableHead>
@@ -434,46 +434,6 @@ export function PedidosContent({
                   ))}
                 </TableBody>
               </Table>
-            </div>
-            <div className="grid gap-3 md:hidden">
-              {filteredPedidos.map((pedido) => (
-                <article
-                  key={pedido.id}
-                  className="rounded-xl border border-[#E3DAF4] bg-white p-4 shadow-[0_10px_28px_-24px_rgba(83,48,122,0.28)]"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h3 className="truncate text-base font-semibold text-[#15142a]">
-                        {pedido.cliente_nome}
-                      </h3>
-                      <p className="mt-1 font-mono text-xs text-muted-foreground">
-                        {pedido.id.slice(0, 8)}...
-                      </p>
-                    </div>
-                    <div className="shrink-0">{renderPedidoMenu(pedido)}</div>
-                  </div>
-
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <Badge className={STATUS_COLORS[pedido.status] || 'bg-gray-100'}>
-                      {pedido.status.replace(/_/g, ' ')}
-                    </Badge>
-                    <span className="rounded-full bg-[#F5F3FA] px-3 py-1 text-xs font-medium text-[#5f5072]">
-                      {formatDate(pedido.prazo_entrega)}
-                    </span>
-                  </div>
-
-                  <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                    <div className="rounded-lg bg-[#F5F3FA]/70 p-3">
-                      <p className="text-xs text-muted-foreground">Total</p>
-                      <p className="mt-1 font-semibold">{formatCurrency(pedido.valor_total ?? 0)}</p>
-                    </div>
-                    <div className="rounded-lg bg-[#F5F3FA]/70 p-3">
-                      <p className="text-xs text-muted-foreground">Prazo</p>
-                      <p className="mt-1 font-semibold">{formatDate(pedido.prazo_entrega)}</p>
-                    </div>
-                  </div>
-                </article>
-              ))}
             </div>
             </>
           )}
