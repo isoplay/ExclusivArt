@@ -8,6 +8,7 @@ import {
   AlertTriangle,
   ArrowDown,
   ArrowUp,
+  ArrowUpDown,
   MoreHorizontal,
   Package,
   Pencil,
@@ -58,6 +59,9 @@ import { parseDecimalInput } from '@/lib/number'
 import { saveOfflineSnapshot } from '@/lib/offline-cache'
 import type { Material, TipoComponenteConfig, TipoMovimentacao } from '@/lib/types/database'
 import { createMaterial, deleteMaterial, registrarMovimentacao, updateMaterial } from './actions'
+
+type MaterialSortField = 'nome' | 'tipo' | 'quantidade' | 'custo'
+type SortDirection = 'asc' | 'desc'
 
 function getEstoqueAtual(material: Material) {
   return material.quantidade_atual ?? material.quantidade ?? 0
@@ -264,12 +268,19 @@ export function EstoqueContent({
   const [addCor, setAddCor] = useState('#808080')
   const [editCor, setEditCor] = useState('#808080')
   const [movTipo, setMovTipo] = useState<TipoMovimentacao>('entrada')
+  const [sortField, setSortField] = useState<MaterialSortField>('nome')
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
   const [isPreparingImage, setIsPreparingImage] = useState(false)
   const [isPending, startTransition] = useTransition()
   const isSaving = isPending || isPreparingImage
 
   const tiposAtivos = useMemo(
-    () => tiposComponentes.filter((tipo) => tipo.ativo),
+    () =>
+      tiposComponentes
+        .filter((tipo) => tipo.ativo)
+        .sort((a, b) =>
+          a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base', numeric: true })
+        ),
     [tiposComponentes]
   )
   const tiposValidos = useMemo(
@@ -323,19 +334,77 @@ export function EstoqueContent({
         ordem: 999,
       })
     }
-    return options
+    return options.sort((a, b) =>
+      a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base', numeric: true })
+    )
   }
 
   const materiaisSemTipo = materiais.filter(materialSemTipoValido)
-  const filteredMateriais = materiais.filter((material) => {
-    const matchesSearch = material.nome.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesTipo =
-      tipoFilter === 'all' ||
-      (tipoFilter === '__sem_tipo' && materialSemTipoValido(material)) ||
-      normalizeKey(material.tipo) === normalizeKey(tipoFilter)
+  const filteredMateriais = materiais
+    .filter((material) => {
+      const matchesSearch = material.nome.toLowerCase().includes(searchTerm.toLowerCase())
+      const matchesTipo =
+        tipoFilter === 'all' ||
+        (tipoFilter === '__sem_tipo' && materialSemTipoValido(material)) ||
+        normalizeKey(material.tipo) === normalizeKey(tipoFilter)
 
-    return matchesSearch && matchesTipo
-  })
+      return matchesSearch && matchesTipo
+    })
+    .sort((a, b) => {
+      let comparison = 0
+
+      if (sortField === 'nome') {
+        comparison = a.nome.localeCompare(b.nome, 'pt-BR', {
+          sensitivity: 'base',
+          numeric: true,
+        })
+      } else if (sortField === 'tipo') {
+        comparison = String(a.tipo ?? '').localeCompare(String(b.tipo ?? ''), 'pt-BR', {
+          sensitivity: 'base',
+          numeric: true,
+        })
+      } else if (sortField === 'quantidade') {
+        comparison = getEstoqueAtual(a) - getEstoqueAtual(b)
+      } else {
+        comparison = Number(a.custo_unitario ?? 0) - Number(b.custo_unitario ?? 0)
+      }
+
+      if (comparison === 0) {
+        comparison = a.nome.localeCompare(b.nome, 'pt-BR', {
+          sensitivity: 'base',
+          numeric: true,
+        })
+      }
+
+      return sortDirection === 'asc' ? comparison : -comparison
+    })
+
+  function handleSort(field: MaterialSortField) {
+    if (sortField === field) {
+      setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))
+      return
+    }
+
+    setSortField(field)
+    setSortDirection('asc')
+  }
+
+  function renderSortIcon(field: MaterialSortField) {
+    if (sortField !== field) {
+      return <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
+    }
+
+    return sortDirection === 'asc' ? (
+      <ArrowUp className="h-3.5 w-3.5" aria-hidden />
+    ) : (
+      <ArrowDown className="h-3.5 w-3.5" aria-hidden />
+    )
+  }
+
+  function getAriaSort(field: MaterialSortField) {
+    if (sortField !== field) return 'none' as const
+    return sortDirection === 'asc' ? ('ascending' as const) : ('descending' as const)
+  }
 
   async function getPreparedImage() {
     setIsPreparingImage(true)
@@ -856,10 +925,46 @@ export function EstoqueContent({
               <Table className="min-w-[760px]">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Material</TableHead>
-                    <TableHead>Tipo de componente</TableHead>
-                    <TableHead className="text-right">Quantidade</TableHead>
-                    <TableHead className="text-right">Custo Unit.</TableHead>
+                    <TableHead aria-sort={getAriaSort('nome')}>
+                      <button
+                        type="button"
+                        onClick={() => handleSort('nome')}
+                        className="flex items-center gap-1.5 font-medium hover:text-foreground"
+                      >
+                        Material
+                        {renderSortIcon('nome')}
+                      </button>
+                    </TableHead>
+                    <TableHead aria-sort={getAriaSort('tipo')}>
+                      <button
+                        type="button"
+                        onClick={() => handleSort('tipo')}
+                        className="flex items-center gap-1.5 font-medium hover:text-foreground"
+                      >
+                        Tipo de componente
+                        {renderSortIcon('tipo')}
+                      </button>
+                    </TableHead>
+                    <TableHead className="text-right" aria-sort={getAriaSort('quantidade')}>
+                      <button
+                        type="button"
+                        onClick={() => handleSort('quantidade')}
+                        className="ml-auto flex items-center gap-1.5 font-medium hover:text-foreground"
+                      >
+                        Quantidade
+                        {renderSortIcon('quantidade')}
+                      </button>
+                    </TableHead>
+                    <TableHead className="text-right" aria-sort={getAriaSort('custo')}>
+                      <button
+                        type="button"
+                        onClick={() => handleSort('custo')}
+                        className="ml-auto flex items-center gap-1.5 font-medium hover:text-foreground"
+                      >
+                        Custo Unit.
+                        {renderSortIcon('custo')}
+                      </button>
+                    </TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="w-[80px]"></TableHead>
                   </TableRow>
