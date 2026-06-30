@@ -852,8 +852,8 @@ export function EstoqueContent({
             </div>
           ) : (
             <>
-            <div className="hidden overflow-x-auto md:block">
-              <Table>
+            <div className="overflow-x-auto">
+              <Table className="min-w-[760px]">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Material</TableHead>
@@ -964,86 +964,6 @@ export function EstoqueContent({
                   })}
                 </TableBody>
               </Table>
-            </div>
-
-            <div className="grid min-w-0 gap-3 md:hidden">
-              {filteredMateriais.map((material) => {
-                const status = getStockStatus(material)
-                const tipoInvalido = materialSemTipoValido(material)
-                const materialImageUrl = getPreviewImageUrl(material.imagem_url)
-
-                return (
-                  <article
-                    key={material.id}
-                    className="min-w-0 overflow-hidden rounded-xl border border-[#E3DAF4] bg-white p-4 shadow-[0_10px_28px_-24px_rgba(83,48,122,0.28)]"
-                  >
-                    <div className="flex min-w-0 items-start justify-between gap-3">
-                      <div className="flex min-w-0 flex-1 items-start gap-3">
-                        {materialImageUrl ? (
-                          <button
-                            type="button"
-                            className="shrink-0 rounded-md text-left outline-none ring-offset-background transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                            onClick={() => setPreviewMaterial(material)}
-                            title={`Ver foto de ${material.nome}`}
-                          >
-                            <MaterialAvatar
-                              imageUrl={materialImageUrl}
-                              color={material.cor}
-                              tipo={material.tipo}
-                              nome={material.nome}
-                            />
-                          </button>
-                        ) : (
-                          <MaterialAvatar
-                            color={material.cor}
-                            tipo={material.tipo}
-                            nome={material.nome}
-                          />
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <h3 className="break-words text-base font-semibold leading-snug text-[#15142a]">
-                            {material.nome}
-                          </h3>
-                          <div className="mt-1">
-                            {tipoInvalido ? (
-                              <Badge variant="outline" className="border-amber-300 text-amber-700">
-                                Sem tipo valido
-                              </Badge>
-                            ) : (
-                              <p className="break-words text-xs text-muted-foreground">{material.tipo}</p>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="shrink-0">{renderMaterialMenu(material)}</div>
-                    </div>
-
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      <Badge variant="secondary" className={status.className}>
-                        {status.label}
-                      </Badge>
-                      <span className="rounded-full bg-[#F5F3FA] px-3 py-1 text-xs font-medium text-[#5f5072]">
-                        Min. {material.quantidade_minima ?? 30} {material.unidade}
-                      </span>
-                    </div>
-
-                    <div className="mt-4 grid grid-cols-1 gap-2 text-sm min-[430px]:grid-cols-2">
-                      <div className="rounded-lg bg-[#F5F3FA]/70 p-3">
-                        <p className="text-xs text-muted-foreground">Quantidade</p>
-                        <p className="mt-1 font-semibold">
-                          {getEstoqueAtual(material)} {material.unidade}
-                        </p>
-                      </div>
-                      <div className="rounded-lg bg-[#F5F3FA]/70 p-3">
-                        <p className="text-xs text-muted-foreground">Custo unit.</p>
-                        <p className="mt-1 font-semibold">
-                          {formatCurrency(material.custo_unitario)}
-                        </p>
-                      </div>
-                    </div>
-                  </article>
-                )
-              })}
             </div>
             </>
           )}

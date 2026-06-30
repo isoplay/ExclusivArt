@@ -2,11 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createAuthenticatedClient } from '@/lib/auth'
-import {
-  getCanonicalMaterialType,
-  isStandardMaterialType,
-  MATERIAL_TYPES,
-} from '@/lib/material-types'
+import { getCanonicalMaterialType } from '@/lib/material-types'
 import { logServerError } from '@/lib/server-log'
 import type { TipoComponenteConfig } from '@/lib/types/database'
 
@@ -69,23 +65,25 @@ export async function getTiposComponentesConfig(): Promise<TipoComponenteConfig[
     }
 
     const materialCount = new Map<string, number>()
+    const materialTypeNames = new Map<string, string>()
     ;(materiais || []).forEach((material) => {
       const tipo = getCanonicalMaterialType(material.tipo)
       if (!tipo) return
       const key = normalizeKey(tipo)
       materialCount.set(key, (materialCount.get(key) || 0) + 1)
+      materialTypeNames.set(key, tipo)
     })
 
     const grouped = new Map<string, TipoComponenteConfig>(
-      MATERIAL_TYPES.map((tipo) => [
-        normalizeKey(tipo.nome),
+      Array.from(materialTypeNames, ([key, nome]) => [
+        key,
         {
-          nome: tipo.nome,
+          nome,
           ativo: false,
           total_grupos: 0,
           categorias: [],
-          materiais_vinculados: materialCount.get(normalizeKey(tipo.nome)) || 0,
-          ordem: tipo.ordem,
+          materiais_vinculados: materialCount.get(key) || 0,
+          ordem: 999,
         },
       ])
     )
@@ -231,10 +229,6 @@ export async function renomearTipoComponente(nomeAtual: string, formData: FormDa
     return { success: true }
   }
 
-  if (isStandardMaterialType(atual)) {
-    return { success: false, error: 'Os tipos padronizados nao podem ser renomeados' }
-  }
-
   const { error } = await supabase.rpc('renomear_tipo_componente', {
     p_nome_atual: atual,
     p_novo_nome: nome,
@@ -262,10 +256,6 @@ export async function alternarTipoComponente(nome: string, ativo: boolean) {
 
   if (!tipo) {
     return { success: false, error: 'Tipo de componente inválido' }
-  }
-
-  if (!ativo && isStandardMaterialType(tipo)) {
-    return { success: false, error: 'Os seis tipos padronizados devem permanecer ativos' }
   }
 
   const { error } = await supabase
