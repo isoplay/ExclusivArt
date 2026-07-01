@@ -4,7 +4,12 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { WifiOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { formatSnapshotDate, readOfflineSnapshot, type OfflineSnapshot } from '@/lib/offline-cache'
+import {
+  formatSnapshotDate,
+  OFFLINE_SNAPSHOT_UPDATED_EVENT,
+  readOfflineSnapshot,
+  type OfflineSnapshot,
+} from '@/lib/offline-cache'
 
 export function OfflineStatusIndicator() {
   const [isOnline, setIsOnline] = useState(true)
@@ -19,12 +24,12 @@ export function OfflineStatusIndicator() {
     updateStatus()
     window.addEventListener('online', updateStatus)
     window.addEventListener('offline', updateStatus)
-    window.addEventListener('exclusiv-art:offline-snapshot-updated', updateStatus)
+    window.addEventListener(OFFLINE_SNAPSHOT_UPDATED_EVENT, updateStatus)
 
     return () => {
       window.removeEventListener('online', updateStatus)
       window.removeEventListener('offline', updateStatus)
-      window.removeEventListener('exclusiv-art:offline-snapshot-updated', updateStatus)
+      window.removeEventListener(OFFLINE_SNAPSHOT_UPDATED_EVENT, updateStatus)
     }
   }, [])
 

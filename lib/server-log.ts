@@ -41,11 +41,11 @@ export function getSafeError(error: unknown) {
 }
 
 export function logServerInfo(event: string, details?: LogDetails) {
-  console.info('[exclusivart-prod]', event, sanitizeDetails(details) ?? {})
+  console.info('[exclusiva-fe-prod]', event, sanitizeDetails(details) ?? {})
 }
 
 export function logServerError(event: string, error: unknown, details?: LogDetails) {
-  console.error('[exclusivart-prod]', event, {
+  console.error('[exclusiva-fe-prod]', event, {
     ...sanitizeDetails(details),
     error: getSafeError(error),
   })

@@ -1,4 +1,5 @@
 import Image from 'next/image'
+import { BRAND_ICON, BRAND_NAME } from '@/lib/brand'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar'
 import { PWAInstallPrompt } from '@/components/pwa-install-prompt'
@@ -30,12 +31,12 @@ export default async function DashboardLayout({
               title="Mostrar ou esconder menu lateral"
               className="-ml-1 h-10 w-10 shrink-0 rounded-full text-[#5f5072] hover:bg-[#f3edf8]"
             />
-            <div className="relative h-9 w-9 shrink-0 md:hidden">
+            <div className="relative h-9 w-20 shrink-0 overflow-hidden rounded-xl bg-[#f3edf8] md:hidden">
               <Image
-                src="/exclusiv-art-logo.png"
-                alt="ExclusivArt"
+                src={BRAND_ICON}
+                alt={BRAND_NAME}
                 fill
-                className="object-contain"
+                className="object-contain px-2 py-1"
               />
             </div>
             <div className="flex min-w-0 flex-1 items-center gap-2 md:gap-4">

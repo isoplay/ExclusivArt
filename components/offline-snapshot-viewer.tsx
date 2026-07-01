@@ -3,7 +3,12 @@
 import { useEffect, useState } from 'react'
 import { Package, Boxes } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { formatSnapshotDate, readOfflineSnapshot, type OfflineSnapshot } from '@/lib/offline-cache'
+import {
+  formatSnapshotDate,
+  OFFLINE_SNAPSHOT_UPDATED_EVENT,
+  readOfflineSnapshot,
+  type OfflineSnapshot,
+} from '@/lib/offline-cache'
 
 function SnapshotList({
   title,
@@ -52,11 +57,11 @@ export function OfflineSnapshotViewer() {
     const update = () => setSnapshot(readOfflineSnapshot())
     update()
     window.addEventListener('storage', update)
-    window.addEventListener('exclusiv-art:offline-snapshot-updated', update)
+    window.addEventListener(OFFLINE_SNAPSHOT_UPDATED_EVENT, update)
 
     return () => {
       window.removeEventListener('storage', update)
-      window.removeEventListener('exclusiv-art:offline-snapshot-updated', update)
+      window.removeEventListener(OFFLINE_SNAPSHOT_UPDATED_EVENT, update)
     }
   }, [])
 

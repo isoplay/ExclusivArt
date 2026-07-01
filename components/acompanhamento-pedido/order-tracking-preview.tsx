@@ -12,6 +12,7 @@ import {
   Wallet,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { BRAND_LOGO, BRAND_NAME, BRAND_TAGLINE } from '@/lib/brand'
 import type { StatusPedido } from '@/lib/types/database'
 
 export type TrackingStatus = StatusPedido
@@ -139,18 +140,18 @@ export function OrderTrackingPreview({ order }: { order: OrderTrackingData }) {
         <header className="tracking-rise mx-auto flex max-w-3xl flex-col items-center text-center">
           <div className="rounded-[1.75rem] border border-white/80 bg-white/58 px-8 py-5 shadow-[0_24px_62px_-38px_rgba(92,61,142,0.42)] backdrop-blur-xl">
             <Image
-              src="/exclusiv-art-logo.png"
-              alt="Exclusiv ART"
-              width={184}
-              height={184}
+              src={BRAND_LOGO}
+              alt={BRAND_NAME}
+              width={691}
+              height={350}
               priority
-              className="h-24 w-auto object-contain opacity-90 drop-shadow-[0_18px_36px_rgba(92,61,142,0.22)] sm:h-28"
+              className="aspect-[691/361] w-full max-w-[270px] object-contain drop-shadow-[0_16px_28px_rgba(92,61,142,0.2)]"
             />
           </div>
 
           <div className="mt-7 inline-flex min-h-10 items-center gap-2 rounded-full border border-[#E3DAF4] bg-white/78 px-5 text-sm font-semibold text-[#5F5474] shadow-[0_10px_32px_-24px_rgba(92,61,142,0.42)] backdrop-blur-xl">
             <Sparkles className="h-4 w-4 text-[#A792D8]" aria-hidden />
-            Exclusiv ART
+            {BRAND_NAME}
           </div>
 
           <h1 className="tracking-serif mt-8 max-w-2xl text-balance text-4xl font-medium leading-tight text-[#333333] sm:text-5xl lg:text-6xl">
@@ -301,7 +302,7 @@ export function OrderTrackingPreview({ order }: { order: OrderTrackingData }) {
 
           {order.status === 'cancelado' ? (
             <div className="mt-7 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm leading-6 text-red-700">
-              Este pedido foi cancelado. Para qualquer dúvida, fale com a Exclusiv ART pelo WhatsApp.
+              Este pedido foi cancelado. Para qualquer dúvida, fale com a {BRAND_NAME} pelo WhatsApp.
             </div>
           ) : null}
         </section>
@@ -342,7 +343,7 @@ export function OrderTrackingPreview({ order }: { order: OrderTrackingData }) {
           <div className="tracking-card tracking-rise flex flex-col justify-between gap-7 p-6 [animation-delay:270ms] sm:p-8">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#9A8AC2]">
-                Mensagem da Exclusiv ART
+                Mensagem da {BRAND_NAME}
               </p>
               <p className="mt-6 text-lg leading-8 text-[#333333]">
                 {order.message}
@@ -367,7 +368,7 @@ export function OrderTrackingPreview({ order }: { order: OrderTrackingData }) {
           >
             <span className="relative z-10 flex items-center justify-center gap-3">
               <WhatsAppIcon className="h-5 w-5" />
-              Falar com a Exclusiv ART pelo WhatsApp
+              Falar com a {BRAND_NAME} pelo WhatsApp
             </span>
             <span
               aria-hidden
@@ -383,7 +384,7 @@ export function OrderTrackingPreview({ order }: { order: OrderTrackingData }) {
 
         <footer className="pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-8 text-center">
           <p className="tracking-serif text-lg text-[#333333]">
-            Exclusiv ART — Feito com cuidado e carinho.
+            {BRAND_NAME} — {BRAND_TAGLINE}
           </p>
           <p className="mt-3 text-sm leading-6 text-[#666666]">
             Este link mostra apenas as informações públicas do seu pedido.
@@ -400,17 +401,17 @@ export function OrderTrackingUnavailable() {
       <div aria-hidden className="tracking-aurora absolute inset-0 -z-20" />
       <section className="tracking-card mx-auto max-w-md p-8 text-center">
         <Image
-          src="/exclusiv-art-logo.png"
-          alt="Exclusiv ART"
-          width={144}
-          height={144}
-          className="mx-auto h-24 w-auto object-contain opacity-90"
+          src={BRAND_LOGO}
+          alt={BRAND_NAME}
+          width={691}
+          height={350}
+          className="mx-auto aspect-[691/361] w-full max-w-[250px] object-contain drop-shadow-[0_16px_28px_rgba(92,61,142,0.2)]"
         />
         <h1 className="tracking-serif mt-8 text-3xl font-medium">
           Link indisponível
         </h1>
         <p className="mt-4 text-sm leading-6 text-[#666666]">
-          Não encontramos um acompanhamento ativo para este link. Peça um novo link para a Exclusiv ART.
+          Não encontramos um acompanhamento ativo para este link. Peça um novo link para a {BRAND_NAME}.
         </p>
       </section>
     </main>

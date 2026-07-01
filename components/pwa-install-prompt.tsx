@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
+import { BRAND_NAME } from '@/lib/brand'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Download, X, Smartphone } from 'lucide-react'
 
@@ -105,7 +106,7 @@ export function PWAInstallPrompt() {
             </Button>
           </div>
           <CardDescription className="text-xs">
-            Instale o Exclusiv Art no seu celular para acesso rapido
+            Instale o {BRAND_NAME} no seu celular para acesso rápido
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-0">

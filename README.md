@@ -1,4 +1,4 @@
-# 🎨 Exclusiv Art - Sistema ERP para Artesanato
+# ✨ Exclusiva Fé - Sistema ERP para Artesanato
 
 Um sistema web de gestão especializado para pequenas empresas de artesanato que produzem terços, pulseiras, chaveiros e outros produtos religiosos.
 

@@ -1,12 +1,9 @@
-const CACHE_NAME = 'exclusiv-art-v7'
+const CACHE_NAME = 'exclusiva-fe-v8'
 const PRECACHE_ASSETS = [
   '/offline',
   '/manifest.json',
-  '/android-chrome-192x192.png',
-  '/android-chrome-512x512.png',
-  '/apple-icon.png',
-  '/favicon.ico',
-  '/exclusiv-art-logo.png',
+  '/exclusiva-fe-logo.png',
+  '/exclusiva-fe-icon.svg',
 ]
 
 self.addEventListener('install', (event) => {

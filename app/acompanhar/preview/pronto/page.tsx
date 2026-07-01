@@ -3,14 +3,15 @@ import {
   OrderTrackingPreview,
   type OrderTrackingData,
 } from '@/components/acompanhamento-pedido/order-tracking-preview'
+import { BRAND_NAME } from '@/lib/brand'
 
 export const metadata: Metadata = {
-  title: 'Preview Pronto para Entrega | Exclusiv ART',
+  title: `Preview Pronto para Entrega | ${BRAND_NAME}`,
   description: 'Previa visual do acompanhamento de pedido pronto para entrega.',
 }
 
 const previewOrder: OrderTrackingData = {
-  customerName: 'Cliente Exclusiv ART',
+  customerName: `Cliente ${BRAND_NAME}`,
   orderCode: 'EXA-PREVIEW',
   status: 'pronto',
   expectedDate: '12 de junho de 2026',

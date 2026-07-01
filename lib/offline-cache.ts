@@ -13,7 +13,9 @@ export type OfflineSnapshot = {
   produtos: OfflineSnapshotItem[]
 }
 
-const SNAPSHOT_KEY = 'exclusiv-art:offline-snapshot:v1'
+const SNAPSHOT_KEY = 'exclusiva-fe:offline-snapshot:v1'
+const LEGACY_SNAPSHOT_KEY = 'exclusiv-art:offline-snapshot:v1'
+export const OFFLINE_SNAPSHOT_UPDATED_EVENT = 'exclusiva-fe:offline-snapshot-updated'
 const MAX_ITEMS = 120
 
 function isBrowser() {
@@ -33,8 +35,14 @@ export function readOfflineSnapshot(): OfflineSnapshot {
   if (!isBrowser()) return getEmptySnapshot()
 
   try {
-    const raw = window.localStorage.getItem(SNAPSHOT_KEY)
+    const currentRaw = window.localStorage.getItem(SNAPSHOT_KEY)
+    const legacyRaw = window.localStorage.getItem(LEGACY_SNAPSHOT_KEY)
+    const raw = currentRaw ?? legacyRaw
     if (!raw) return getEmptySnapshot()
+
+    if (!currentRaw && legacyRaw) {
+      window.localStorage.setItem(SNAPSHOT_KEY, legacyRaw)
+    }
 
     const parsed = JSON.parse(raw) as Partial<OfflineSnapshot>
     return {
@@ -63,7 +71,7 @@ export function saveOfflineSnapshot(partial: Partial<Pick<OfflineSnapshot, 'mate
     }
 
     window.localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(next))
-    window.dispatchEvent(new CustomEvent('exclusiv-art:offline-snapshot-updated'))
+    window.dispatchEvent(new CustomEvent(OFFLINE_SNAPSHOT_UPDATED_EVENT))
   } catch {
     // Safari privado e alguns WebViews bloqueiam storage. Nesse caso o app segue online normal.
   }
@@ -74,7 +82,8 @@ export function clearOfflineSnapshot() {
 
   try {
     window.localStorage.removeItem(SNAPSHOT_KEY)
-    window.dispatchEvent(new CustomEvent('exclusiv-art:offline-snapshot-updated'))
+    window.localStorage.removeItem(LEGACY_SNAPSHOT_KEY)
+    window.dispatchEvent(new CustomEvent(OFFLINE_SNAPSHOT_UPDATED_EVENT))
   } catch {
     // O logout continua mesmo quando o navegador bloqueia o storage.
   }

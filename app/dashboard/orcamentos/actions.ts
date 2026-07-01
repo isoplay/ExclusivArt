@@ -6,6 +6,7 @@ import { headers } from 'next/headers'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createAuthenticatedClient } from '@/lib/auth'
 import { logServerError } from '@/lib/server-log'
+import { BRAND_NAME } from '@/lib/brand'
 import type {
   OrcamentoComItens,
   OrigemComponenteOrcamento,
@@ -821,7 +822,7 @@ export async function gerarLinkOrcamento(id: string): Promise<GerarLinkOrcamento
 
   const baseUrl = await getRequestBaseUrl()
   const quoteUrl = `${baseUrl}/o/${slug}`
-  const message = `Olá, ${orcamento.cliente_nome}! Preparei seu orçamento da Exclusiv ART. Você pode conferir aqui: ${quoteUrl}`
+  const message = `Olá, ${orcamento.cliente_nome}! Preparei seu orçamento da ${BRAND_NAME}. Você pode conferir aqui: ${quoteUrl}`
   const whatsappPhone = normalizeWhatsAppPhone(orcamento.cliente_contato)
   const whatsappUrl = whatsappPhone
     ? `https://wa.me/${whatsappPhone}?text=${encodeURIComponent(message)}`

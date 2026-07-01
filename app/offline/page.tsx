@@ -3,17 +3,18 @@ import { Button } from '@/components/ui/button'
 import Image from 'next/image'
 import Link from 'next/link'
 import { OfflineSnapshotViewer } from '@/components/offline-snapshot-viewer'
+import { BRAND_ICON, BRAND_NAME } from '@/lib/brand'
 
 export default function OfflinePage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <div className="flex w-full max-w-4xl flex-col items-center text-center">
-        <div className="relative mx-auto h-24 w-24">
+        <div className="relative mx-auto h-24 w-48 overflow-hidden rounded-3xl border border-[#e3daf4] bg-[#f5f1fb] shadow-[0_18px_40px_-28px_rgba(92,61,142,0.42)]">
           <Image
-            src="/exclusiv-art-logo.png"
-            alt="ExclusivArt"
+            src={BRAND_ICON}
+            alt={BRAND_NAME}
             fill
-            className="object-contain opacity-70"
+            className="object-contain p-4"
           />
         </div>
         

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title>Exclusiva Fé</title>
+  <rect width="512" height="512" rx="112" fill="#E3DAF4"/>
+  <rect x="22" y="22" width="468" height="468" rx="94" fill="none" stroke="#C8BDE9" stroke-width="10"/>
+  <image
+    href="/exclusiva-fe-logo.png"
+    xlink:href="/exclusiva-fe-logo.png"
+    x="34"
+    y="132"
+    width="444"
+    height="232"
+    preserveAspectRatio="xMidYMid meet"
+  />
+</svg>

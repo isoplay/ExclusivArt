@@ -203,7 +203,7 @@ pnpm install
 # NEXT_PUBLIC_VERCEL_ENV=production
 
 # PWA
-# NEXT_PUBLIC_APP_NAME=Exclusiv Art
+# NEXT_PUBLIC_APP_NAME=Exclusiva Fé
 ```
 
 ---

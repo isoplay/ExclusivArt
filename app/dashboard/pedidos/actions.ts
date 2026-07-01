@@ -8,6 +8,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Pedido, PedidoComItens, Produto, StatusPedido, Material, ProdutoMaterial } from '@/lib/types/database'
 import { arredondarParaCimaMeioReal } from '@/lib/utils'
 import { logServerError } from '@/lib/server-log'
+import { BRAND_NAME } from '@/lib/brand'
 import {
   escapePostgrestSearch,
   isFiniteNumberInRange,
@@ -295,7 +296,7 @@ function normalizeWhatsAppPhone(value: string | null | undefined) {
 }
 
 function buildTrackingMessage(clienteNome: string, trackingUrl: string) {
-  return `Olá, ${clienteNome}! Aqui está o link para acompanhar seu pedido da Exclusiv ART: ${trackingUrl}`
+  return `Olá, ${clienteNome}! Aqui está o link para acompanhar seu pedido da ${BRAND_NAME}: ${trackingUrl}`
 }
 
 export type GerarLinkAcompanhamentoResult =

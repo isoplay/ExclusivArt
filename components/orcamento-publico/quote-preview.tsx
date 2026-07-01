@@ -18,6 +18,7 @@ import type {
   StatusOrcamento,
 } from '@/lib/types/database'
 import { cn } from '@/lib/utils'
+import { BRAND_LOGO, BRAND_NAME, BRAND_TAGLINE } from '@/lib/brand'
 
 export type QuotePreviewData = {
   cliente_nome: string
@@ -177,17 +178,17 @@ export function QuotePreview({
         <header className="tracking-rise mx-auto flex max-w-3xl flex-col items-center text-center">
           <div className="rounded-[1.75rem] border border-white/80 bg-white/58 px-7 py-4 shadow-[0_24px_62px_-38px_rgba(92,61,142,0.42)] backdrop-blur-xl">
             <Image
-              src="/exclusiv-art-logo.png"
-              alt="Exclusiv ART"
-              width={184}
-              height={184}
+              src={BRAND_LOGO}
+              alt={BRAND_NAME}
+              width={691}
+              height={350}
               priority
-              className="h-20 w-auto object-contain opacity-90 drop-shadow-[0_18px_36px_rgba(92,61,142,0.22)] sm:h-24"
+              className="aspect-[691/361] w-full max-w-[270px] object-contain drop-shadow-[0_16px_28px_rgba(92,61,142,0.2)]"
             />
           </div>
           <div className="mt-5 inline-flex min-h-10 items-center gap-2 rounded-full border border-[#E3DAF4] bg-white/78 px-5 text-sm font-semibold text-[#5F5474] shadow-[0_10px_32px_-24px_rgba(92,61,142,0.42)] backdrop-blur-xl">
             <Sparkles className="h-4 w-4 text-[#A792D8]" aria-hidden />
-            Exclusiv ART
+            {BRAND_NAME}
           </div>
           <h1 className="tracking-serif mt-6 max-w-2xl text-balance text-4xl font-medium leading-tight text-[#333333] sm:text-5xl lg:text-6xl">
             Seu orçamento personalizado
@@ -379,7 +380,7 @@ export function QuotePreview({
 
         <footer className="pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-5 text-center">
           <p className="tracking-serif text-lg text-[#333333]">
-            Exclusiv ART — Feito com cuidado e carinho.
+            {BRAND_NAME} — {BRAND_TAGLINE}
           </p>
           {quote.created_at && (
             <p className="mt-2 text-sm text-[#666666]">
@@ -402,15 +403,15 @@ export function QuoteUnavailable() {
       </div>
       <section className="tracking-card mx-auto max-w-md p-8 text-center" role="alert">
         <Image
-          src="/exclusiv-art-logo.png"
-          alt="Exclusiv ART"
-          width={144}
-          height={144}
-          className="mx-auto h-24 w-auto object-contain opacity-90"
+          src={BRAND_LOGO}
+          alt={BRAND_NAME}
+          width={691}
+          height={350}
+          className="mx-auto aspect-[691/361] w-full max-w-[250px] object-contain drop-shadow-[0_16px_28px_rgba(92,61,142,0.2)]"
         />
         <h1 className="tracking-serif mt-8 text-3xl font-medium">Link indisponível</h1>
         <p className="mt-4 text-sm leading-6 text-[#666666]">
-          Não encontramos um orçamento ativo para este link. Peça um novo link para a Exclusiv ART.
+          Não encontramos um orçamento ativo para este link. Peça um novo link para a {BRAND_NAME}.
         </p>
       </section>
     </main>

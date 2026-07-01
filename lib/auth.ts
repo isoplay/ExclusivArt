@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { cache } from 'react'
 import type { User } from '@supabase/supabase-js'
+import { BRAND_NAME } from '@/lib/brand'
 import { isInvalidRefreshTokenError, isSupabaseAuthCookie } from '@/lib/supabase/auth-errors'
 import { createClient } from '@/lib/supabase/server'
 import { logServerError, logServerInfo } from '@/lib/server-log'
@@ -96,5 +97,5 @@ export function getUserDisplayName(user: User | null | undefined) {
     return titleCaseName(emailName)
   }
 
-  return 'Exclusiv Art'
+  return BRAND_NAME
 }

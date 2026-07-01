@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
+import { BRAND_LOGO, BRAND_NAME } from '@/lib/brand'
 
 export default function HomePage() {
   useEffect(() => {
@@ -11,9 +12,9 @@ export default function HomePage() {
     <main className="flex min-h-svh items-center justify-center bg-[#fbf8ff] px-6 text-center text-[#332947]">
       <div className="space-y-4">
         <img
-          src="/exclusiv-art-logo.png"
-          alt="Exclusiv Art"
-          className="mx-auto h-24 w-auto object-contain"
+          src={BRAND_LOGO}
+          alt={BRAND_NAME}
+          className="mx-auto aspect-[691/361] w-full max-w-[300px] object-contain drop-shadow-[0_16px_28px_rgba(92,61,142,0.2)]"
         />
         <p className="text-sm text-[#5f536f]">Abrindo o sistema...</p>
         <a

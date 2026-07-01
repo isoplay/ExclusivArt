@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
+import { BRAND_ICON, BRAND_NAME } from '@/lib/brand'
 
 export default function GlobalError({
   error,
@@ -10,7 +11,7 @@ export default function GlobalError({
   reset: () => void
 }) {
   useEffect(() => {
-    console.error('[exclusivart-client] global_error', {
+    console.error('[exclusiva-fe-client] global_error', {
       digest: error.digest,
       name: error.name,
     })
@@ -20,9 +21,9 @@ export default function GlobalError({
     <main className="flex min-h-svh items-center justify-center bg-[#fbf8ff] px-6 text-center text-[#332947]">
       <div className="max-w-sm space-y-4">
         <img
-          src="/exclusiv-art-logo.png"
-          alt="Exclusiv Art"
-          className="mx-auto h-24 w-auto object-contain"
+          src={BRAND_ICON}
+          alt={BRAND_NAME}
+          className="mx-auto aspect-[691/361] w-full max-w-[220px] rounded-2xl bg-[#f5f1fb] p-4 object-contain shadow-[0_18px_40px_-28px_rgba(92,61,142,0.42)]"
         />
         <h1 className="text-xl font-semibold">Nao foi possivel carregar</h1>
         <p className="text-sm leading-6 text-[#5f536f]">

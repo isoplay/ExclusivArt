@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { createPublicClient } from '@/lib/supabase/public'
 import { logServerError } from '@/lib/server-log'
+import { BRAND_NAME } from '@/lib/brand'
 import type { PedidoAcompanhamentoPublico, StatusPedido } from '@/lib/types/database'
 import {
   isValidPublicToken,
@@ -16,8 +17,8 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 export const metadata: Metadata = {
-  title: 'Acompanhamento do Pedido | Exclusiv ART',
-  description: 'Pagina publica de acompanhamento de pedido da Exclusiv ART.',
+  title: `Acompanhamento do Pedido | ${BRAND_NAME}`,
+  description: `Página pública de acompanhamento de pedido da ${BRAND_NAME}.`,
   robots: {
     index: false,
     follow: false,
@@ -62,9 +63,9 @@ function getStatusMessage(status: StatusPedido) {
       'Seu pedido está sendo produzido com atenção aos detalhes. Assim que estiver pronto, avisaremos você pelo WhatsApp.',
     pronto:
       'Seu pedido está pronto para entrega. Em breve combinaremos os detalhes pelo WhatsApp.',
-    entregue: 'Seu pedido foi entregue. Obrigada por confiar no trabalho da Exclusiv ART.',
+    entregue: `Seu pedido foi entregue. Obrigada por confiar no trabalho da ${BRAND_NAME}.`,
     cancelado:
-      'Este pedido foi cancelado. Se precisar de ajuda, fale com a Exclusiv ART pelo WhatsApp.',
+      `Este pedido foi cancelado. Se precisar de ajuda, fale com a ${BRAND_NAME} pelo WhatsApp.`,
   }
 
   return messages[status] ?? messages.orcamento

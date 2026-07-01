@@ -305,7 +305,7 @@ export async function validarEstoqueComponentes(
 /**
  * Calcula o CUSTO BASE por unidade (sem margem e sem arredondamento).
  *
- * Regra ExclusivArt (obrigatória):
+ * Regra Exclusiva Fé (obrigatória):
  * - Cada material entra com seu custo real cadastrado.
  * - NUNCA aplicar margem por componente.
  * - NUNCA arredondar por componente ou por unidade.

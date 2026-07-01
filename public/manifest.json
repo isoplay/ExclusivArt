@@ -1,6 +1,6 @@
 {
-  "name": "Exclusiv Art - Gestao de Artesanato",
-  "short_name": "Exclusiv Art",
+  "name": "Exclusiva Fé - Gestão de Artesanato",
+  "short_name": "Exclusiva Fé",
   "description": "Sistema de gestao para artesanato religioso - tercos, pulseiras e chaveiros",
   "start_url": "/dashboard",
   "scope": "/",
@@ -11,27 +11,15 @@
   "prefer_related_applications": false,
   "icons": [
     {
-      "src": "/android-chrome-192x192.png",
-      "sizes": "192x192",
-      "type": "image/png",
+      "src": "/exclusiva-fe-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
       "purpose": "any"
     },
     {
-      "src": "/android-chrome-512x512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/android-chrome-192x192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "maskable"
-    },
-    {
-      "src": "/android-chrome-512x512.png",
-      "sizes": "512x512",
-      "type": "image/png",
+      "src": "/exclusiva-fe-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
       "purpose": "maskable"
     }
   ],

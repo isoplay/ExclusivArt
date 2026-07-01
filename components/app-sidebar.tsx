@@ -29,6 +29,7 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar'
 import { cn } from '@/lib/utils'
+import { BRAND_ICON, BRAND_NAME } from '@/lib/brand'
 
 const menuItems = [
   {
@@ -103,16 +104,16 @@ export function AppSidebar() {
         <Link href="/dashboard" onClick={handleNavClick} className="flex items-center justify-center">
           <div
             className={cn(
-              'relative drop-shadow-[0_12px_24px_rgba(80,48,122,0.16)] transition-all duration-200',
-              isCollapsed ? 'h-10 w-10' : 'h-20 w-20 min-[900px]:h-28 min-[900px]:w-28'
+              'relative overflow-hidden rounded-[1.5rem] border border-white/50 bg-white/45 shadow-[0_16px_36px_-24px_rgba(80,48,122,0.5)] backdrop-blur-sm transition-all duration-200',
+              isCollapsed ? 'h-10 w-20' : 'h-16 w-36 min-[900px]:h-20 min-[900px]:w-44'
             )}
           >
             <div className="absolute inset-0">
               <Image
-                src="/exclusiv-art-logo.png"
-                alt="Exclusiv Art"
+                src={BRAND_ICON}
+                alt={BRAND_NAME}
                 fill
-                className="object-contain"
+                className="object-contain p-3"
                 priority
               />
             </div>
@@ -158,7 +159,7 @@ export function AppSidebar() {
 
       <SidebarFooter className="border-t border-white/15 p-4">
         <p className="text-center text-xs font-medium text-[#5f5072]/75">
-          {isCollapsed ? 'EA' : 'Exclusiv Art v1.0'}
+          {isCollapsed ? 'EF' : `${BRAND_NAME} v1.0`}
         </p>
       </SidebarFooter>
     </Sidebar>

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { createPublicClient } from '@/lib/supabase/public'
 import { logServerError } from '@/lib/server-log'
+import { BRAND_NAME } from '@/lib/brand'
 import { parsePublicOrcamento } from '@/lib/orcamentos/validation'
 import { isValidPublicSlug } from '@/lib/public-tracking-validation'
 import {
@@ -12,8 +13,8 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 export const metadata: Metadata = {
-  title: 'Seu orçamento personalizado | Exclusiv ART',
-  description: 'Orçamento personalizado preparado pela Exclusiv ART.',
+  title: `Seu orçamento personalizado | ${BRAND_NAME}`,
+  description: `Orçamento personalizado preparado pela ${BRAND_NAME}.`,
   robots: {
     index: false,
     follow: false,

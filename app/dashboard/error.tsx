@@ -12,7 +12,7 @@ export default function DashboardError({
   reset: () => void
 }) {
   useEffect(() => {
-    console.error('[exclusivart-client] dashboard_error', {
+    console.error('[exclusiva-fe-client] dashboard_error', {
       digest: error.digest,
       name: error.name,
     })

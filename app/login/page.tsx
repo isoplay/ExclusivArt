@@ -1,5 +1,6 @@
 import { login } from './actions'
 import { LockKeyhole, Mail, Sparkles } from 'lucide-react'
+import { BRAND_LOGO, BRAND_NAME } from '@/lib/brand'
 
 export default async function LoginPage({
   searchParams,
@@ -37,9 +38,9 @@ export default async function LoginPage({
       <section className="relative mx-auto flex min-h-[calc(100svh-3.5rem)] w-full max-w-[400px] flex-col justify-center py-2">
         <div className="login-rise mb-9 flex justify-center">
           <img
-            src="/exclusiv-art-logo.png"
-            alt="Exclusiv Art"
-            className="h-32 w-auto max-w-[260px] object-contain opacity-95 drop-shadow-[0_16px_34px_rgba(115,83,164,0.24)] sm:h-36"
+            src={BRAND_LOGO}
+            alt={BRAND_NAME}
+            className="aspect-[691/361] w-full max-w-[310px] object-contain drop-shadow-[0_18px_30px_rgba(92,61,142,0.22)]"
           />
         </div>
 
@@ -70,7 +71,7 @@ export default async function LoginPage({
                   autoComplete="email"
                   required
                   className="h-12 min-w-0 flex-1 bg-transparent text-base text-[#2f2640] outline-none placeholder:text-[#9d91ad]"
-                  placeholder="voce@exclusivart.com"
+                  placeholder="seu@email.com"
                 />
               </div>
             </div>
@@ -142,7 +143,7 @@ export default async function LoginPage({
         </div>
 
         <p className="login-rise mt-6 text-center text-xs leading-5 text-[#7b6f8b] [animation-delay:240ms]">
-          Feito com devoção • © 2026 Exclusiv Art
+          Feito com devoção • © 2026 {BRAND_NAME}
         </p>
       </section>
     </main>

@@ -4,6 +4,7 @@ import { Analytics } from '@vercel/analytics/next'
 import { Toaster } from 'sonner'
 import { ServiceWorkerRegistration } from '@/components/service-worker-registration'
 import { ThemeProvider } from '@/components/theme-provider'
+import { BRAND_ICON, BRAND_NAME, BRAND_SOCIAL_IMAGE } from '@/lib/brand'
 import './globals.css'
 
 const poppins = Poppins({ 
@@ -13,21 +14,38 @@ const poppins = Poppins({
 })
 
 export const metadata: Metadata = {
-  title: 'Exclusiv Art - Gestao de Artesanato',
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_SITE_URL || 'https://exclusivart-artesanato.vercel.app'
+  ),
+  title: `${BRAND_NAME} - Gestão de Artesanato`,
   description: 'Sistema de gestao para artesanato religioso - tercos, pulseiras e chaveiros',
   generator: 'v0.app',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'Exclusiv Art',
+    title: BRAND_NAME,
   },
   formatDetection: {
     telephone: false,
   },
+  openGraph: {
+    title: BRAND_NAME,
+    description: 'Gestão de pedidos, estoque e produção artesanal.',
+    siteName: BRAND_NAME,
+    locale: 'pt_BR',
+    type: 'website',
+    images: [BRAND_SOCIAL_IMAGE],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: BRAND_NAME,
+    description: 'Gestão de pedidos, estoque e produção artesanal.',
+    images: [BRAND_SOCIAL_IMAGE],
+  },
   icons: {
-    icon: '/android-chrome-192x192.png',
-    apple: '/apple-icon.png',
+    icon: BRAND_ICON,
+    apple: BRAND_ICON,
   },
 }
 
@@ -49,7 +67,7 @@ export default function RootLayout({
     // Evita falso positivo de hydration quando extensoes do navegador alteram o HTML antes do React.
     <html lang="pt-BR" suppressHydrationWarning>
       <head>
-        <link rel="apple-touch-icon" href="/apple-icon.png" />
+        <link rel="apple-touch-icon" href={BRAND_ICON} />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="mobile-web-app-capable" content="yes" />
