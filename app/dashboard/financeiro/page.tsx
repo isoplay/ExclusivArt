@@ -1,10 +1,9 @@
 import { getFinanceiroResumo, getDespesas } from './actions'
 import { FinanceiroContent } from './financeiro-content'
+import { getBusinessYearMonth } from '@/lib/business-time'
 
 export default async function FinanceiroPage() {
-  const now = new Date()
-  const mes = now.getMonth()
-  const ano = now.getFullYear()
+  const { mes, ano } = getBusinessYearMonth()
 
   const [resumo, despesas] = await Promise.all([
     getFinanceiroResumo(mes, ano),

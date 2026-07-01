@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import { format, formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { toast } from 'sonner'
+import { formatBusinessMonth } from '@/lib/business-time'
 import { formatDateBR, parseDateString } from '@/lib/utils'
 import {
   AlertTriangle,
@@ -430,10 +431,7 @@ export function DashboardContent({
   usuarioNome: string
   mostrarBoasVindas: boolean
 }) {
-  const currentMonth = new Date().toLocaleDateString('pt-BR', {
-    month: 'long',
-    year: 'numeric',
-  })
+  const currentMonth = formatBusinessMonth()
   const resumoMensagem = buildResumoMensagem(metrics)
 
   useEffect(() => {
