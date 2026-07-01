@@ -71,7 +71,7 @@ const STATUS_COLORS: { [key: string]: string } = {
   confirmado: 'bg-blue-100 text-blue-800',
   separando_materiais: 'bg-purple-100 text-purple-800',
   em_producao: 'bg-yellow-100 text-yellow-800',
-  pronto: 'bg-cyan-100 text-cyan-800',
+  pronto: 'bg-pink-100 text-pink-800',
   entregue: 'bg-emerald-100 text-emerald-800',
   cancelado: 'bg-red-100 text-red-800',
 }
