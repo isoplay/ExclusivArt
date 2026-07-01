@@ -12,6 +12,7 @@ Use esta pasta como base do Obsidian para a documentacao do projeto.
 6. [TROUBLESHOOTING.md](TROUBLESHOOTING.md) - erros comuns e solucoes.
 7. [ORCAMENTOS.md](ORCAMENTOS.md) - arquitetura, seguranca e validacao dos orcamentos livres.
 8. [SECURITY-HARDENING.md](SECURITY-HARDENING.md) - controles aplicados e configuracoes externas.
+9. [ROADMAP-SIMPLIFICACAO.md](ROADMAP-SIMPLIFICACAO.md) - prioridades para reduzir complexidade e organizar os proximos ciclos.
 
 ## Observacoes
 
