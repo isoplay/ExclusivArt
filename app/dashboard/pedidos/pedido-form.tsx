@@ -6,22 +6,16 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronUp,
+  Copy,
+  Pencil,
   PackageCheck,
   Plus,
   Trash2,
 } from 'lucide-react'
-import { createMaterial } from '@/app/dashboard/estoque/actions'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -39,6 +33,7 @@ import type {
   Material,
   PedidoComItens,
 } from '@/lib/types/database'
+import { parseDecimalInput } from '@/lib/number'
 import { arredondarParaCimaMeioReal, formatDateBR } from '@/lib/utils'
 import { createPedidoCustomizado, updatePedidoCustomizado } from './actions'
 
@@ -51,6 +46,17 @@ interface ComponenteSelecionado {
   custo_unit: number
   unidade: string
   estoque_atual: number
+}
+
+interface PedidoItemDraft {
+  id: string
+  categoria_id: string
+  quantidade_itens: number
+  componentes: ComponenteSelecionado[]
+  margem_percentual: number
+  mao_obra_valor: string
+  preco_final_manual: string
+  motivo_ajuste_preco: string
 }
 
 type PedidoFormMode = 'create' | 'edit'
@@ -124,6 +130,52 @@ function getInitialComponentes(
   )
 }
 
+function getInitialItemDrafts(
+  pedido: PedidoComItens | null | undefined,
+  categorias: CategoriaProduto[],
+  grupos: GrupoComponente[],
+  materiais: Material[]
+): PedidoItemDraft[] {
+  if (!pedido) return []
+
+  return (pedido.pedido_itens || []).map((item, index) => {
+    const categoriaId =
+      categorias.find((categoria) => normalizeKey(categoria.nome) === normalizeKey(item.produto?.nome))?.id ||
+      pedido.tipo_produto_id ||
+      ''
+    const quantidadeItens = Math.max(1, item.quantidade || 1)
+    const componentesItem = (item.pedido_itens_materiais || []).map((pedidoMaterial) => {
+      const material =
+        pedidoMaterial.material ||
+        materiais.find((materialItem) => materialItem.id === pedidoMaterial.material_id)
+      const grupo = findGrupoForMaterial(material, grupos)
+      const quantidade = Math.max(1, Math.round((pedidoMaterial.quantidade || 1) / quantidadeItens))
+
+      return {
+        grupo_id: grupo?.id || '',
+        grupo_nome: grupo?.nome || material?.tipo || 'Material',
+        material_id: pedidoMaterial.material_id,
+        material_nome: material?.nome || 'Material',
+        quantidade,
+        custo_unit: material?.custo_unitario || 0,
+        unidade: material?.unidade || 'un',
+        estoque_atual: material ? getEstoqueAtual(material) : 0,
+      }
+    })
+
+    return {
+      id: item.id || `item-${index + 1}`,
+      categoria_id: categoriaId,
+      quantidade_itens: quantidadeItens,
+      componentes: componentesItem,
+      margem_percentual: 100,
+      mao_obra_valor: '',
+      preco_final_manual: item.preco_manual ? String(Number(item.valor_total || 0)).replace('.', ',') : '',
+      motivo_ajuste_preco: item.motivo_ajuste_preco || '',
+    }
+  })
+}
+
 function inferCategoriaId(
   pedido: PedidoComItens,
   categorias: CategoriaProduto[]
@@ -156,8 +208,6 @@ export function PedidoForm({
   onSuccess?: () => void
 }) {
   const [isPending, startTransition] = useTransition()
-  const [localMateriais, setLocalMateriais] = useState<Material[]>(materiais)
-
   const [clienteNome, setClienteNome] = useState('')
   const [clienteContato, setClienteContato] = useState('')
   const [clienteEndereco, setClienteEndereco] = useState('')
@@ -171,42 +221,40 @@ export function PedidoForm({
   const [grupoAtual, setGrupoAtual] = useState('')
   const [materialAtual, setMaterialAtual] = useState('')
   const [margemPercentual, setMargemPercentual] = useState(100)
-
-  const [isMaterialOpen, setIsMaterialOpen] = useState(false)
-  const [novoMaterialNome, setNovoMaterialNome] = useState('')
-  const [novoMaterialTipo, setNovoMaterialTipo] = useState('')
-  const [novoMaterialUnidade, setNovoMaterialUnidade] = useState('un')
-  const [novoMaterialCor, setNovoMaterialCor] = useState('#808080')
-  const [novoMaterialQuantidade, setNovoMaterialQuantidade] = useState('0')
-  const [novoMaterialMinimo, setNovoMaterialMinimo] = useState('30')
-  const [novoMaterialCusto, setNovoMaterialCusto] = useState('0')
+  const [maoObraValor, setMaoObraValor] = useState('')
+  const [precoFinalManual, setPrecoFinalManual] = useState('')
+  const [motivoAjustePreco, setMotivoAjustePreco] = useState('')
+  const [itensPedido, setItensPedido] = useState<PedidoItemDraft[]>([])
 
   const isEditMode = mode === 'edit'
   const isMaterialsLocked = Boolean(initialPedido?.estoque_baixado)
 
   useEffect(() => {
-    setLocalMateriais(materiais)
-  }, [materiais])
-
-  useEffect(() => {
     if (!initialPedido) return
 
+    const initialDrafts = getInitialItemDrafts(initialPedido, categorias, grupos, materiais)
     const itemPrincipal = initialPedido.pedido_itens?.[0]
+    const draftPrincipal = initialDrafts[0]
     const categoriaId = inferCategoriaId(initialPedido, categorias)
 
     setClienteNome(initialPedido.cliente_nome || '')
     setClienteContato(initialPedido.cliente_contato || '')
     setClienteEndereco(initialPedido.cliente_endereco || '')
     setPrazoEntrega(toDateInput(initialPedido.prazo_entrega))
-    setCategoriaSelecionada(categoriaId)
-    setQuantidadeItens(Math.max(1, itemPrincipal?.quantidade || 1))
-    setComponentesSelecionados(getInitialComponentes(initialPedido, grupos, materiais))
+    setCategoriaSelecionada(draftPrincipal?.categoria_id || categoriaId)
+    setQuantidadeItens(draftPrincipal?.quantidade_itens || Math.max(1, itemPrincipal?.quantidade || 1))
+    setComponentesSelecionados(draftPrincipal?.componentes || [])
     setShowResumo(false)
     setObservacoes(initialPedido.observacoes || '')
     setObservacaoCliente(initialPedido.observacao_cliente || '')
     setGrupoAtual('')
     setMaterialAtual('')
-    setMargemPercentual(100)
+    setMargemPercentual(draftPrincipal?.margem_percentual || 100)
+    setMaoObraValor(draftPrincipal?.mao_obra_valor || '')
+    const valorItemAtual = Number(itemPrincipal?.valor_total ?? initialPedido.valor_total ?? 0)
+    setPrecoFinalManual(draftPrincipal?.preco_final_manual || (itemPrincipal?.preco_manual ? String(valorItemAtual).replace('.', ',') : ''))
+    setMotivoAjustePreco(draftPrincipal?.motivo_ajuste_preco || itemPrincipal?.motivo_ajuste_preco || '')
+    setItensPedido(initialDrafts.slice(1))
   }, [categorias, initialPedido, grupos, materiais])
 
   const categoriaAtual = categorias.find((categoria) => categoria.id === categoriaSelecionada)
@@ -222,24 +270,108 @@ export function PedidoForm({
     const tipo = normalizeKey(grupoAtualObj?.nome)
     if (!tipo) return []
 
-    return localMateriais
+    return materiais
       .filter((material) => normalizeKey(material.tipo) === tipo)
       .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
-  }, [grupoAtualObj?.nome, localMateriais])
+  }, [grupoAtualObj?.nome, materiais])
 
   const custoMateriaisUnitario = componentesSelecionados.reduce(
     (acc, componente) => acc + componente.custo_unit * componente.quantidade,
     0
   )
-  const maodeobraUnitario = maodeobra[categoriaSelecionada] || 0
   const custoMateriaisTotal = custoMateriaisUnitario * quantidadeItens
-  const maodeobraTotal = maodeobraUnitario * quantidadeItens
+  const maodeobraTotal = Math.max(0, parseDecimalInput(maoObraValor))
   const custoBase = custoMateriaisTotal + maodeobraTotal
   const margemAplicada = margemPercentual
   const valorComMargem = custoBase * (1 + margemAplicada / 100)
   const valorFinalArredondado = arredondarParaCimaMeioReal(valorComMargem)
+  const precoManualNumber = parseDecimalInput(precoFinalManual)
+  const hasPrecoManual = precoFinalManual.trim() !== '' && precoManualNumber >= 0
+  const valorFinalCobrado = hasPrecoManual ? precoManualNumber : valorFinalArredondado
   const ajusteArredondamento = valorFinalArredondado - valorComMargem
-  const lucroEstimado = valorFinalArredondado - custoBase
+  const diferencaPrecoManual = valorFinalCobrado - valorFinalArredondado
+  const percentualAjusteManual =
+    valorFinalArredondado > 0 ? (diferencaPrecoManual / valorFinalArredondado) * 100 : 0
+  const lucroEstimado = valorFinalCobrado - custoBase
+  const itemAtualValido =
+    Boolean(categoriaSelecionada) && componentesSelecionados.length > 0 && quantidadeItens > 0
+
+  function createLocalItemId() {
+    return `item-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  }
+
+  function getItemLabel(item: PedidoItemDraft, index: number) {
+    const categoria = categorias.find((categoriaItem) => categoriaItem.id === item.categoria_id)
+    return categoria?.nome || `Item ${index + 1}`
+  }
+
+  function calcularItem(item: PedidoItemDraft) {
+    const quantidade = Math.max(1, item.quantidade_itens || 1)
+    const custoMateriaisUnitarioItem = item.componentes.reduce(
+      (acc, componente) => acc + componente.custo_unit * componente.quantidade,
+      0
+    )
+    const custoMateriaisTotalItem = custoMateriaisUnitarioItem * quantidade
+    const maodeobraTotalItem = Math.max(0, parseDecimalInput(item.mao_obra_valor))
+    const custoBaseItem = custoMateriaisTotalItem + maodeobraTotalItem
+    const margemItem = Math.max(0, item.margem_percentual || 0)
+    const valorComMargemItem = custoBaseItem * (1 + margemItem / 100)
+    const valorCalculadoItem = arredondarParaCimaMeioReal(valorComMargemItem)
+    const precoManual = parseDecimalInput(item.preco_final_manual)
+    const hasManual = item.preco_final_manual.trim() !== '' && precoManual >= 0
+    const valorFinalItem = hasManual ? precoManual : valorCalculadoItem
+
+    return {
+      custoMateriaisTotal: custoMateriaisTotalItem,
+      maodeobraTotal: maodeobraTotalItem,
+      custoBase: custoBaseItem,
+      valorCalculado: valorCalculadoItem,
+      valorFinal: valorFinalItem,
+      hasManual,
+    }
+  }
+
+  function buildCurrentItemDraft(): PedidoItemDraft {
+    return {
+      id: createLocalItemId(),
+      categoria_id: categoriaSelecionada,
+      quantidade_itens: quantidadeItens,
+      componentes: componentesSelecionados,
+      margem_percentual: margemPercentual,
+      mao_obra_valor: maoObraValor,
+      preco_final_manual: precoFinalManual,
+      motivo_ajuste_preco: motivoAjustePreco,
+    }
+  }
+
+  const itensParaSalvar = [
+    ...itensPedido,
+    ...(itemAtualValido && !isMaterialsLocked ? [buildCurrentItemDraft()] : []),
+  ]
+  const totaisItensSalvos = itensPedido.map((item) => calcularItem(item))
+  const totalItensSalvos = totaisItensSalvos.reduce((acc, item) => acc + item.valorFinal, 0)
+  const totalCalculadoItensSalvos = totaisItensSalvos.reduce((acc, item) => acc + item.valorCalculado, 0)
+  const totalCustoMateriaisItensSalvos = totaisItensSalvos.reduce(
+    (acc, item) => acc + item.custoMateriaisTotal,
+    0
+  )
+  const totalMaodeobraItensSalvos = totaisItensSalvos.reduce((acc, item) => acc + item.maodeobraTotal, 0)
+  const totalCustoBaseItensSalvos = totaisItensSalvos.reduce((acc, item) => acc + item.custoBase, 0)
+  const totalPedidoCobrado = totalItensSalvos + (itemAtualValido && !isMaterialsLocked ? valorFinalCobrado : 0)
+  const totalPedidoCalculado =
+    totalCalculadoItensSalvos + (itemAtualValido && !isMaterialsLocked ? valorFinalArredondado : 0)
+  const totalCustoMateriaisPedido =
+    totalCustoMateriaisItensSalvos + (itemAtualValido && !isMaterialsLocked ? custoMateriaisTotal : 0)
+  const totalMaodeobraPedido =
+    totalMaodeobraItensSalvos + (itemAtualValido && !isMaterialsLocked ? maodeobraTotal : 0)
+  const totalCustoBasePedido =
+    totalCustoBaseItensSalvos + (itemAtualValido && !isMaterialsLocked ? custoBase : 0)
+  const quantidadeItensPedido =
+    itensPedido.reduce((acc, item) => acc + Math.max(1, item.quantidade_itens || 1), 0) +
+    (itemAtualValido && !isMaterialsLocked ? quantidadeItens : 0)
+  const quantidadeComponentesPedido =
+    itensPedido.reduce((acc, item) => acc + item.componentes.length, 0) +
+    (itemAtualValido && !isMaterialsLocked ? componentesSelecionados.length : 0)
 
   function resetForm() {
     setClienteNome('')
@@ -255,6 +387,22 @@ export function PedidoForm({
     setGrupoAtual('')
     setMaterialAtual('')
     setMargemPercentual(100)
+    setMaoObraValor('')
+    setPrecoFinalManual('')
+    setMotivoAjustePreco('')
+    setItensPedido([])
+  }
+
+  function limparItemAtual() {
+    setCategoriaSelecionada('')
+    setQuantidadeItens(1)
+    setComponentesSelecionados([])
+    setGrupoAtual('')
+    setMaterialAtual('')
+    setMargemPercentual(100)
+    setMaoObraValor('')
+    setPrecoFinalManual('')
+    setMotivoAjustePreco('')
   }
 
   function handleCategoriaChange(value: string) {
@@ -267,70 +415,6 @@ export function PedidoForm({
   function handleGrupoChange(value: string) {
     setGrupoAtual(value)
     setMaterialAtual('')
-  }
-
-  function abrirNovoMaterial() {
-    setNovoMaterialTipo(grupoAtualObj?.nome || gruposCat[0]?.nome || '')
-    setIsMaterialOpen(true)
-  }
-
-  function resetNovoMaterial() {
-    setNovoMaterialNome('')
-    setNovoMaterialTipo(grupoAtualObj?.nome || gruposCat[0]?.nome || '')
-    setNovoMaterialUnidade('un')
-    setNovoMaterialCor('#808080')
-    setNovoMaterialQuantidade('0')
-    setNovoMaterialMinimo('30')
-    setNovoMaterialCusto('0')
-  }
-
-  function handleCreateMaterial(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-
-    if (!novoMaterialTipo) {
-      toast.error('Selecione o tipo do material')
-      return
-    }
-
-    const formData = new FormData()
-    formData.set('nome', novoMaterialNome)
-    formData.set('tipo', novoMaterialTipo)
-    formData.set('unidade', novoMaterialUnidade)
-    formData.set('cor', novoMaterialCor)
-    formData.set('quantidade', novoMaterialQuantidade)
-    formData.set('quantidade_minima', novoMaterialMinimo)
-    formData.set('custo_unitario', novoMaterialCusto)
-    formData.set('preco_compra', '0')
-
-    startTransition(async () => {
-      const result = await createMaterial(formData)
-
-      if (!result.success) {
-        toast.error(result.error || 'Erro ao cadastrar material')
-        return
-      }
-
-      if (!result.material) {
-        toast.error('Material cadastrado, mas nao foi possivel seleciona-lo automaticamente.')
-        return
-      }
-
-      const material = result.material
-      setLocalMateriais((prev) => [...prev.filter((item) => item.id !== material.id), material])
-
-      const grupoDoMaterial = gruposCat.find(
-        (grupo) => normalizeKey(grupo.nome) === normalizeKey(material.tipo)
-      )
-
-      if (grupoDoMaterial) {
-        setGrupoAtual(grupoDoMaterial.id)
-        setMaterialAtual(material.id)
-      }
-
-      toast.success('Material cadastrado e selecionado.')
-      setIsMaterialOpen(false)
-      resetNovoMaterial()
-    })
   }
 
   function adicionarComponente() {
@@ -402,21 +486,102 @@ export function PedidoForm({
     })
   }
 
+  function adicionarOutroItem() {
+    if (isMaterialsLocked) return
+    if (!itemAtualValido) {
+      toast.error('Monte o item atual antes de adicionar outro')
+      return
+    }
+    if (precoFinalManual.trim() && precoManualNumber < 0) {
+      toast.error('Preco final invalido')
+      return
+    }
+    if (maoObraValor.trim() && parseDecimalInput(maoObraValor) < 0) {
+      toast.error('Mao de obra invalida')
+      return
+    }
+
+    setItensPedido((prev) => [...prev, buildCurrentItemDraft()])
+    limparItemAtual()
+    toast.success('Item adicionado ao pedido')
+  }
+
+  function editarItemPedido(id: string) {
+    if (isMaterialsLocked) return
+    const item = itensPedido.find((itemPedido) => itemPedido.id === id)
+    if (!item) return
+
+    if (itemAtualValido) {
+      setItensPedido((prev) => [
+        ...prev.filter((itemPedido) => itemPedido.id !== id),
+        buildCurrentItemDraft(),
+      ])
+    } else {
+      setItensPedido((prev) => prev.filter((itemPedido) => itemPedido.id !== id))
+    }
+
+    setCategoriaSelecionada(item.categoria_id)
+    setQuantidadeItens(item.quantidade_itens)
+    setComponentesSelecionados(item.componentes)
+    setGrupoAtual('')
+    setMaterialAtual('')
+    setMargemPercentual(item.margem_percentual)
+    setMaoObraValor(item.mao_obra_valor)
+    setPrecoFinalManual(item.preco_final_manual)
+    setMotivoAjustePreco(item.motivo_ajuste_preco)
+  }
+
+  function duplicarItemPedido(id: string) {
+    if (isMaterialsLocked) return
+    const item = itensPedido.find((itemPedido) => itemPedido.id === id)
+    if (!item) return
+
+    setItensPedido((prev) => [
+      ...prev,
+      {
+        ...item,
+        id: createLocalItemId(),
+        componentes: item.componentes.map((componente) => ({ ...componente })),
+      },
+    ])
+  }
+
+  function excluirItemPedido(id: string) {
+    if (isMaterialsLocked) return
+    setItensPedido((prev) => prev.filter((item) => item.id !== id))
+  }
+
   function salvarPedido() {
     if (!clienteNome.trim()) {
       toast.error('Nome do cliente obrigatorio')
       return
     }
-    if (!categoriaSelecionada && !isMaterialsLocked) {
-      toast.error('Selecione o tipo de produto')
+    if (!isMaterialsLocked && itensPedido.length === 0 && !itemAtualValido) {
+      toast.error('Adicione pelo menos um item ao pedido')
       return
     }
-    if (componentesSelecionados.length === 0 && !isMaterialsLocked) {
-      toast.error('Adicione pelo menos um componente')
+    if (!isMaterialsLocked && categoriaSelecionada && componentesSelecionados.length === 0) {
+      toast.error('Adicione componentes ao item atual ou limpe o item antes de continuar')
       return
     }
     if (!prazoEntrega) {
       toast.error('Prazo de entrega obrigatorio')
+      return
+    }
+    if (precoFinalManual.trim() && precoManualNumber < 0) {
+      toast.error('Preco final invalido')
+      return
+    }
+    if (maoObraValor.trim() && parseDecimalInput(maoObraValor) < 0) {
+      toast.error('Mao de obra invalida')
+      return
+    }
+    if (itensPedido.some((item) => item.preco_final_manual.trim() && parseDecimalInput(item.preco_final_manual) < 0)) {
+      toast.error('Existe item com preco final invalido')
+      return
+    }
+    if (itensPedido.some((item) => item.mao_obra_valor.trim() && parseDecimalInput(item.mao_obra_valor) < 0)) {
+      toast.error('Existe item com mao de obra invalida')
       return
     }
 
@@ -426,20 +591,45 @@ export function PedidoForm({
   function confirmarPedido() {
     startTransition(async () => {
       try {
+        const itensPayload = isMaterialsLocked
+          ? []
+          : itensParaSalvar.map((item) => {
+              const precoManual = parseDecimalInput(item.preco_final_manual)
+
+              return {
+                categoria_id: item.categoria_id,
+                quantidade_itens: item.quantidade_itens,
+                componentes: item.componentes.map((componente) => ({
+                  material_id: componente.material_id,
+                  quantidade: componente.quantidade,
+                })),
+                margem_percentual: item.margem_percentual,
+                mao_obra_valor: parseDecimalInput(item.mao_obra_valor),
+                valor_final_manual:
+                  item.preco_final_manual.trim() !== '' && precoManual >= 0 ? precoManual : null,
+                motivo_ajuste_preco: item.motivo_ajuste_preco || null,
+              }
+            })
+        const primeiroItem = itensPayload[0]
         const payload = {
           cliente_nome: clienteNome,
           cliente_telefone: clienteContato || null,
           cliente_endereco: clienteEndereco || null,
-          categoria_id: categoriaSelecionada,
-          quantidade_itens: quantidadeItens,
-          componentes: componentesSelecionados.map((componente) => ({
-            material_id: componente.material_id,
-            quantidade: componente.quantidade,
-          })),
+          categoria_id: primeiroItem?.categoria_id || categoriaSelecionada,
+          quantidade_itens: primeiroItem?.quantidade_itens || quantidadeItens,
+          componentes:
+            primeiroItem?.componentes ||
+            componentesSelecionados.map((componente) => ({
+              material_id: componente.material_id,
+              quantidade: componente.quantidade,
+            })),
           prazo_entrega: prazoEntrega,
           observacoes: observacoes || null,
           observacao_cliente: observacaoCliente || null,
-          margem_percentual: margemPercentual,
+          margem_percentual: primeiroItem?.margem_percentual || margemPercentual,
+          valor_final_manual: primeiroItem?.valor_final_manual ?? (hasPrecoManual ? valorFinalCobrado : null),
+          motivo_ajuste_preco: primeiroItem?.motivo_ajuste_preco ?? (motivoAjustePreco || null),
+          itens: itensPayload.length > 0 ? itensPayload : undefined,
         }
 
         const result =
@@ -489,16 +679,50 @@ export function PedidoForm({
               </div>
               <div className="space-y-1 rounded-lg border p-3">
                 <p className="text-sm font-semibold">Pedido</p>
-                <p className="text-sm">{categoriaAtual?.nome || 'Produto bloqueado'}</p>
+                <p className="text-sm">
+                  {itensParaSalvar.length > 1
+                    ? `${itensParaSalvar.length} itens no pedido`
+                    : categoriaAtual?.nome || 'Produto bloqueado'}
+                </p>
                 <p className="text-sm text-muted-foreground">
-                  {quantidadeItens} unidade(s) ate {formatDateBR(prazoEntrega)}
+                  {quantidadeItensPedido || quantidadeItens} unidade(s) ate {formatDateBR(prazoEntrega)}
                 </p>
               </div>
             </div>
 
+            {itensParaSalvar.length > 1 && (
+              <div className="space-y-2">
+                <p className="text-sm font-semibold">Itens do pedido</p>
+                <div className="space-y-2">
+                  {itensParaSalvar.map((item, index) => {
+                    const totais = calcularItem(item)
+
+                    return (
+                      <div
+                        key={`${item.id}-${index}`}
+                        className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div>
+                          <p className="text-sm font-medium">
+                            Item {index + 1}: {getItemLabel(item, index)}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {item.quantidade_itens} unidade(s), {item.componentes.length} componente(s)
+                          </p>
+                        </div>
+                        <Badge variant="secondary">{formatCurrency(totais.valorFinal)}</Badge>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
             {componentesSelecionados.length > 0 && (
               <div className="space-y-2">
-                <p className="text-sm font-semibold">Componentes</p>
+                <p className="text-sm font-semibold">
+                  {itensPedido.length > 0 ? 'Componentes do item atual' : 'Componentes'}
+                </p>
                 <div className="space-y-2">
                   {componentesSelecionados.map((componente) => (
                     <div
@@ -522,35 +746,45 @@ export function PedidoForm({
               <div className="space-y-2 rounded-lg bg-muted/50 p-4 text-sm">
                 <div className="flex justify-between">
                   <span>Custo dos materiais</span>
-                  <span>{formatCurrency(custoMateriaisTotal)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Mao de obra</span>
-                  <span>{formatCurrency(maodeobraTotal)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Custo base</span>
-                  <span>{formatCurrency(custoBase)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Margem aplicada</span>
-                  <span>{margemAplicada}%</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Valor com margem</span>
-                  <span>{formatCurrency(valorComMargem)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Arredondamento</span>
-                  <span>{formatCurrency(ajusteArredondamento)}</span>
+                  <span>{formatCurrency(totalCustoMateriaisPedido || custoMateriaisTotal)}</span>
                 </div>
                 <div className="flex justify-between border-t pt-2 text-base font-semibold">
-                  <span>Preco final</span>
-                  <span className="text-green-700">{formatCurrency(valorFinalArredondado)}</span>
+                  <span>Preco calculado total</span>
+                  <span>{formatCurrency(totalPedidoCalculado || valorFinalArredondado)}</span>
                 </div>
+                {(hasPrecoManual || itensPedido.some((item) => calcularItem(item).hasManual)) && (
+                  <>
+                    <div className="flex justify-between">
+                      <span>Preco final cobrado total</span>
+                      <span className="font-semibold text-green-700">
+                        {formatCurrency(totalPedidoCobrado || valorFinalCobrado)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Diferenca</span>
+                      <span
+                        className={
+                          totalPedidoCobrado - totalPedidoCalculado < 0
+                            ? 'text-rose-700'
+                            : 'text-green-700'
+                        }
+                      >
+                        {formatCurrency(totalPedidoCobrado - totalPedidoCalculado)}
+                      </span>
+                    </div>
+                    {motivoAjustePreco && (
+                      <div className="flex justify-between gap-3">
+                        <span>Motivo</span>
+                        <span className="text-right">{motivoAjustePreco}</span>
+                      </div>
+                    )}
+                  </>
+                )}
                 <div className="flex justify-between">
                   <span>Lucro estimado</span>
-                  <span className="font-medium text-green-700">{formatCurrency(lucroEstimado)}</span>
+                  <span className="font-medium text-green-700">
+                    {formatCurrency((totalPedidoCobrado || valorFinalCobrado) - (totalCustoBasePedido || custoBase))}
+                  </span>
                 </div>
               </div>
             )}
@@ -640,9 +874,77 @@ export function PedidoForm({
             </CardContent>
           </Card>
 
+          {itensPedido.length > 0 && (
+            <Card className="overflow-hidden rounded-xl">
+              <CardHeader>
+                <CardTitle className="text-lg">Itens do pedido</CardTitle>
+                <CardDescription>
+                  Cada item pode ter produto, componentes, quantidade e preco final proprios.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {itensPedido.map((item, index) => {
+                  const totais = calcularItem(item)
+
+                  return (
+                    <div
+                      key={item.id}
+                      className="grid min-w-0 gap-3 rounded-lg border p-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold">
+                          Item {index + 1}: {getItemLabel(item, index)}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {item.quantidade_itens} unidade(s), {item.componentes.length} componente(s)
+                        </p>
+                        <p className="mt-1 text-sm font-medium text-green-700">
+                          {formatCurrency(totais.valorFinal)}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => editarItemPedido(item.id)}
+                          disabled={isMaterialsLocked}
+                        >
+                          <Pencil className="mr-2 h-4 w-4" />
+                          Editar
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => duplicarItemPedido(item.id)}
+                          disabled={isMaterialsLocked}
+                        >
+                          <Copy className="mr-2 h-4 w-4" />
+                          Duplicar
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => excluirItemPedido(item.id)}
+                          disabled={isMaterialsLocked}
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Excluir
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </CardContent>
+            </Card>
+          )}
+
           <Card className="overflow-hidden rounded-xl">
             <CardHeader>
-              <CardTitle className="text-lg">Tipo de Produto</CardTitle>
+              <CardTitle className="text-lg">Item atual</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid min-w-0 gap-4 md:grid-cols-2 min-[1180px]:grid-cols-[minmax(0,1fr)_112px_112px]">
@@ -690,7 +992,7 @@ export function PedidoForm({
                 </div>
               </div>
               <p className="mt-3 text-xs leading-5 text-muted-foreground">
-                Margem aplicada sobre o custo base total (materiais + mao de obra). Padrao: 100%.
+                Margem aplicada sobre materiais e mao de obra informada. Padrao: 100%.
               </p>
             </CardContent>
           </Card>
@@ -755,20 +1057,9 @@ export function PedidoForm({
                     </Select>
                     {grupoAtual && materiaisDoTipo.length === 0 && (
                       <p className="text-xs text-amber-700">
-                        Nenhum material do tipo {grupoAtualObj?.nome}. Cadastre aqui sem sair do pedido.
+                        Nenhum material do tipo {grupoAtualObj?.nome}. Cadastre este material em Estoque para usar no pedido.
                       </p>
                     )}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={abrirNovoMaterial}
-                      disabled={gruposCat.length === 0 || isMaterialsLocked}
-                      className="w-full justify-center sm:w-auto"
-                    >
-                      <Plus className="mr-2 h-3.5 w-3.5" />
-                      Novo material
-                    </Button>
                   </div>
                 </div>
 
@@ -781,6 +1072,27 @@ export function PedidoForm({
                     <Plus className="mr-2 h-4 w-4" />
                     Adicionar Componente
                   </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={adicionarOutroItem}
+                    disabled={!itemAtualValido || isMaterialsLocked}
+                    className="w-full sm:w-auto"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Adicionar outro item
+                  </Button>
+                  {itemAtualValido && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={limparItemAtual}
+                      disabled={isMaterialsLocked}
+                      className="w-full sm:w-auto"
+                    >
+                      Limpar item atual
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -853,6 +1165,69 @@ export function PedidoForm({
             </Card>
           )}
 
+          {!isMaterialsLocked && categoriaSelecionada && (
+            <Card className="overflow-hidden rounded-xl">
+              <CardHeader>
+                <CardTitle className="text-lg">Preço final</CardTitle>
+                <CardDescription>
+                  O sistema mantém o cálculo original, mas permite cobrar outro valor quando necessário.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="mao-obra-valor">Mao de obra</Label>
+                    <Input
+                      id="mao-obra-valor"
+                      inputMode="decimal"
+                      value={maoObraValor}
+                      onChange={(event) => setMaoObraValor(event.target.value)}
+                      placeholder="Ex: 20,00"
+                    />
+                  </div>
+                  <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+                    <p className="text-muted-foreground">Preço calculado</p>
+                    <p className="mt-1 text-xl font-semibold text-[#15142a]">
+                      {formatCurrency(valorFinalArredondado)}
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="preco-final-manual">Preço final cobrado</Label>
+                    <Input
+                      id="preco-final-manual"
+                      inputMode="decimal"
+                      value={precoFinalManual}
+                      onChange={(event) => setPrecoFinalManual(event.target.value)}
+                      placeholder={`Ex: ${valorFinalArredondado.toFixed(2).replace('.', ',')}`}
+                    />
+                  </div>
+                </div>
+
+                {hasPrecoManual && (
+                  <div className="rounded-lg border border-[#eadff4] bg-[#fbf8ff] p-3 text-sm">
+                    <div className="flex justify-between gap-4">
+                      <span className="text-muted-foreground">Diferença</span>
+                      <span className={diferencaPrecoManual < 0 ? 'font-medium text-rose-700' : 'font-medium text-green-700'}>
+                        {formatCurrency(diferencaPrecoManual)} ({percentualAjusteManual.toFixed(1)}%)
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label htmlFor="motivo-ajuste-preco">Motivo do ajuste</Label>
+                  <Input
+                    id="motivo-ajuste-preco"
+                    value={motivoAjustePreco}
+                    onChange={(event) => setMotivoAjustePreco(event.target.value)}
+                    maxLength={500}
+                    placeholder="Ex: cliente recorrente, desconto combinado, arredondamento"
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
             <Card className="overflow-hidden rounded-xl">
             <CardHeader>
               <CardTitle className="text-lg">Observacao para o cliente</CardTitle>
@@ -899,42 +1274,40 @@ export function PedidoForm({
           <CardContent className="space-y-4">
             <div className="space-y-2 text-sm">
               <div className="flex justify-between gap-4">
-                <span className="text-muted-foreground">Produto</span>
-                <span className="text-right font-medium">{categoriaAtual?.nome || '-'}</span>
+                <span className="text-muted-foreground">Itens</span>
+                <span className="text-right font-medium">
+                  {itensPedido.length + (itemAtualValido ? 1 : 0)}
+                </span>
               </div>
               <div className="flex justify-between gap-4">
-                <span className="text-muted-foreground">Quantidade</span>
-                <span className="font-medium">{quantidadeItens}</span>
+                <span className="text-muted-foreground">Quantidade total</span>
+                <span className="font-medium">{quantidadeItensPedido || quantidadeItens}</span>
               </div>
               <div className="flex justify-between gap-4">
                 <span className="text-muted-foreground">Componentes</span>
-                <span className="font-medium">{componentesSelecionados.length}</span>
+                <span className="font-medium">{quantidadeComponentesPedido || componentesSelecionados.length}</span>
               </div>
             </div>
 
             <div className="space-y-2 rounded-lg bg-muted/50 p-3 text-sm">
               <div className="flex justify-between gap-4">
                 <span>Custo materiais</span>
-                <span>{formatCurrency(custoMateriaisTotal)}</span>
-              </div>
-              <div className="flex justify-between gap-4">
-                <span>Mao de obra</span>
-                <span>{formatCurrency(maodeobraTotal)}</span>
-              </div>
-              <div className="flex justify-between gap-4">
-                <span>Custo base</span>
-                <span>{formatCurrency(custoBase)}</span>
+                <span>{formatCurrency(totalCustoMateriaisPedido || custoMateriaisTotal)}</span>
               </div>
               <div className="flex justify-between gap-4 border-t pt-2 text-base font-semibold">
-                <span>Preco final ({margemAplicada}%)</span>
-                <span className="text-green-700">{formatCurrency(valorFinalArredondado)}</span>
+                <span>Preco calculado</span>
+                <span>{formatCurrency(totalPedidoCalculado || valorFinalArredondado)}</span>
+              </div>
+              <div className="flex justify-between gap-4 text-base font-semibold">
+                <span>Preco cobrado</span>
+                <span className="text-green-700">{formatCurrency(totalPedidoCobrado || valorFinalCobrado)}</span>
               </div>
             </div>
 
             <div className="flex flex-col gap-2">
               <Button
                 onClick={salvarPedido}
-                disabled={isPending || (componentesSelecionados.length === 0 && !isMaterialsLocked)}
+                disabled={isPending || (itensPedido.length === 0 && !itemAtualValido && !isMaterialsLocked)}
                 className="bg-green-600 hover:bg-green-700"
               >
                 {isPending
@@ -951,118 +1324,6 @@ export function PedidoForm({
         </Card>
       </div>
 
-      <Dialog
-        open={isMaterialOpen}
-        onOpenChange={(open) => {
-          setIsMaterialOpen(open)
-          if (!open) resetNovoMaterial()
-        }}
-      >
-        <DialogContent className="!bottom-2 !left-2 !right-2 !top-2 max-h-none w-auto max-w-none !translate-x-0 !translate-y-0 overflow-y-auto bg-white p-4 sm:!bottom-auto sm:!left-[50%] sm:!right-auto sm:!top-[50%] sm:max-h-[90svh] sm:max-w-xl sm:!translate-x-[-50%] sm:!translate-y-[-50%] sm:p-6">
-          <DialogHeader>
-            <DialogTitle>Cadastrar material</DialogTitle>
-            <DialogDescription>
-              O material entra no estoque e fica disponivel neste pedido imediatamente.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleCreateMaterial} className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="novo-material-nome">Nome *</Label>
-                <Input
-                  id="novo-material-nome"
-                  value={novoMaterialNome}
-                  onChange={(event) => setNovoMaterialNome(event.target.value)}
-                  required
-                  placeholder="Ex: Conta de cristal azul"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="novo-material-tipo">Tipo *</Label>
-                <Select value={novoMaterialTipo} onValueChange={setNovoMaterialTipo}>
-                  <SelectTrigger id="novo-material-tipo">
-                    <SelectValue placeholder="Selecione o tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {gruposCat.map((grupo) => (
-                      <SelectItem key={grupo.id} value={grupo.nome}>
-                        {grupo.nome}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="novo-material-unidade">Unidade *</Label>
-                <Select value={novoMaterialUnidade} onValueChange={setNovoMaterialUnidade}>
-                  <SelectTrigger id="novo-material-unidade">
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {['un', 'm', 'cm', 'g', 'kg', 'ml', 'l', 'pct'].map((unidade) => (
-                      <SelectItem key={unidade} value={unidade}>
-                        {unidade}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="novo-material-quantidade">Quantidade inicial *</Label>
-                <Input
-                  id="novo-material-quantidade"
-                  value={novoMaterialQuantidade}
-                  onChange={(event) => setNovoMaterialQuantidade(event.target.value)}
-                  inputMode="decimal"
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="novo-material-minimo">Estoque minimo *</Label>
-                <Input
-                  id="novo-material-minimo"
-                  value={novoMaterialMinimo}
-                  onChange={(event) => setNovoMaterialMinimo(event.target.value)}
-                  inputMode="decimal"
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="novo-material-custo">Custo unitario (R$) *</Label>
-                <Input
-                  id="novo-material-custo"
-                  value={novoMaterialCusto}
-                  onChange={(event) => setNovoMaterialCusto(event.target.value)}
-                  inputMode="decimal"
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="novo-material-cor">Cor</Label>
-                <div className="flex min-h-10 items-center gap-3">
-                  <Input
-                    id="novo-material-cor"
-                    type="color"
-                    value={novoMaterialCor}
-                    onChange={(event) => setNovoMaterialCor(event.target.value)}
-                    className="h-10 w-16 cursor-pointer p-1"
-                  />
-                  <span className="text-sm text-muted-foreground">{novoMaterialCor}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <Button type="button" variant="outline" onClick={() => setIsMaterialOpen(false)} disabled={isPending}>
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={isPending}>
-                {isPending ? 'Salvando...' : 'Salvar material'}
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
     </>
   )
 }

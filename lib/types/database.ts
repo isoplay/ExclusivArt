@@ -59,7 +59,7 @@ export const STATUS_PEDIDO_OPTIONS: {
   label: string
   className: string
 }[] = [
-  { value: 'orcamento', label: 'Em Orçamento', className: 'bg-yellow-100 text-yellow-800' },
+  { value: 'orcamento', label: 'Pendente', className: 'bg-yellow-100 text-yellow-800' },
   { value: 'confirmado', label: 'Confirmado', className: 'bg-amber-100 text-amber-800' },
   { value: 'separando_materiais', label: 'Separando Materiais', className: 'bg-purple-100 text-purple-800' },
   { value: 'em_producao', label: 'Em Produção', className: 'bg-blue-100 text-blue-800' },
@@ -96,6 +96,11 @@ export type PedidoItem = {
   quantidade: number
   valor_unitario: number
   valor_total: number
+  valor_calculado_total?: number | null
+  preco_manual?: boolean
+  ajuste_manual_valor?: number
+  ajuste_manual_percentual?: number
+  motivo_ajuste_preco?: string | null
   // Relacionamentos carregados apenas quando a query pede.
   produto?: Produto
 }

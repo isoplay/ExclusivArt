@@ -88,7 +88,7 @@ type DashboardMetrics = {
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  orcamento: 'Orçamento',
+  orcamento: 'Pendente',
   confirmado: 'Confirmado',
   separando_materiais: 'Separando materiais',
   em_producao: 'Em produção',

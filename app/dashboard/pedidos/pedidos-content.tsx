@@ -86,6 +86,16 @@ const STATUS_OPTIONS: StatusPedido[] = [
   'cancelado',
 ]
 
+const STATUS_LABELS: Record<StatusPedido, string> = {
+  orcamento: 'Pendente',
+  confirmado: 'Confirmado',
+  separando_materiais: 'Separando materiais',
+  em_producao: 'Em produção',
+  pronto: 'Pronto para entrega',
+  entregue: 'Entregue',
+  cancelado: 'Cancelado',
+}
+
 export function PedidosContent({
   pedidos,
   materiais,
@@ -235,7 +245,7 @@ export function PedidosContent({
                   onClick={() => handleStatusChange(pedido.id, status)}
                   disabled={status === pedido.status}
                 >
-                  {status.replace(/_/g, ' ')}
+                  {STATUS_LABELS[status]}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>
@@ -354,7 +364,7 @@ export function PedidosContent({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos status</SelectItem>
-                <SelectItem value="orcamento">Orçamento</SelectItem>
+                <SelectItem value="orcamento">Pendente</SelectItem>
                 <SelectItem value="confirmado">Confirmado</SelectItem>
                 <SelectItem value="separando_materiais">Separando Materiais</SelectItem>
                 <SelectItem value="em_producao">Em Produção</SelectItem>
@@ -420,7 +430,7 @@ export function PedidosContent({
                       </TableCell>
                       <TableCell>
                         <Badge className={STATUS_COLORS[pedido.status] || 'bg-gray-100'}>
-                          {pedido.status.replace(/_/g, ' ')}
+                          {STATUS_LABELS[pedido.status] ?? pedido.status}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right font-medium">
@@ -455,7 +465,7 @@ export function PedidosContent({
 
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <Badge className={STATUS_COLORS[pedido.status] || 'bg-gray-100'}>
-                      {pedido.status.replace(/_/g, ' ')}
+                      {STATUS_LABELS[pedido.status] ?? pedido.status}
                     </Badge>
                     <span className="rounded-full bg-[#F5F3FA] px-3 py-1 text-xs font-medium text-[#5f5072]">
                       {formatDate(pedido.prazo_entrega)}
@@ -513,7 +523,7 @@ export function PedidosContent({
                 <div>
                   <p className="text-sm text-muted-foreground">Status</p>
                   <Badge className={STATUS_COLORS[selectedPedido.status]}>
-                    {selectedPedido.status.replace(/_/g, ' ')}
+                    {STATUS_LABELS[selectedPedido.status] ?? selectedPedido.status}
                   </Badge>
                 </div>
                 <div>

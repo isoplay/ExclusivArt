@@ -5,12 +5,10 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   Boxes,
-  CalendarDays,
   ClipboardList,
   History,
   LayoutDashboard,
   Package,
-  ReceiptText,
   Settings,
   ShoppingCart,
   Wallet,
@@ -38,6 +36,11 @@ const menuItems = [
     icon: LayoutDashboard,
   },
   {
+    title: 'Pedidos',
+    url: '/dashboard/pedidos',
+    icon: ShoppingCart,
+  },
+  {
     title: 'Estoque',
     url: '/dashboard/estoque',
     icon: Boxes,
@@ -48,24 +51,9 @@ const menuItems = [
     icon: Package,
   },
   {
-    title: 'Pedidos',
-    url: '/dashboard/pedidos',
-    icon: ShoppingCart,
-  },
-  {
-    title: 'Orçamentos',
-    url: '/dashboard/orcamentos',
-    icon: ReceiptText,
-  },
-  {
     title: 'Operacao',
     url: '/dashboard/operacao',
     icon: ClipboardList,
-  },
-  {
-    title: 'Calendário',
-    url: '/dashboard/calendario',
-    icon: CalendarDays,
   },
   {
     title: 'Financeiro',
@@ -73,7 +61,7 @@ const menuItems = [
     icon: Wallet,
   },
   {
-    title: 'Histórico',
+    title: 'Historico',
     url: '/dashboard/historico-vendas',
     icon: History,
   },

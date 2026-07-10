@@ -503,7 +503,7 @@ export async function criarPedidoComMontagem(
         cliente_nome,
         cliente_contato: cliente_telefone || null,
         prazo_entrega: data_entrega || null,
-        status: 'orcamento',
+        status: 'separando_materiais',
         observacoes: observacoesFinal,
         observacao_cliente: cleanOptionalText(observacao_cliente),
         prioridade: 1,

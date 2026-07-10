@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Plus, Pencil, Check, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, GripVertical, Pencil, Plus, RotateCcw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -21,6 +22,7 @@ import type { TipoComponenteConfig } from '@/lib/types/database'
 import {
   alternarTipoComponente,
   criarTipoComponente,
+  ordenarTiposComponentes,
   renomearTipoComponente,
 } from './actions'
 
@@ -29,10 +31,15 @@ interface ComponentesConfigProps {
 }
 
 export default function ComponentesConfigContent({ tipos }: ComponentesConfigProps) {
+  const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [novoTipo, setNovoTipo] = useState('')
   const [editingTipo, setEditingTipo] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
+  const tiposOrdenados = [...tipos].sort((a, b) => {
+    if (a.ordem !== b.ordem) return a.ordem - b.ordem
+    return a.nome.localeCompare(b.nome, 'pt-BR')
+  })
 
   function handleCreate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -44,6 +51,7 @@ export default function ComponentesConfigContent({ tipos }: ComponentesConfigPro
       if (result.success) {
         toast.success('Tipo de componente criado')
         setNovoTipo('')
+        router.refresh()
       } else {
         toast.error(result.error || 'Erro ao criar tipo')
       }
@@ -66,6 +74,7 @@ export default function ComponentesConfigContent({ tipos }: ComponentesConfigPro
         toast.success('Tipo atualizado')
         setEditingTipo(null)
         setEditValue('')
+        router.refresh()
       } else {
         toast.error(result.error || 'Erro ao atualizar tipo')
       }
@@ -78,10 +87,39 @@ export default function ComponentesConfigContent({ tipos }: ComponentesConfigPro
 
       if (result.success) {
         toast.success(ativo ? 'Tipo ativado' : 'Tipo desativado')
+        router.refresh()
       } else {
         toast.error(result.error || 'Erro ao alterar tipo')
       }
     })
+  }
+
+  function salvarOrdem(nomes: string[], successMessage: string) {
+    startTransition(async () => {
+      const result = await ordenarTiposComponentes(nomes)
+
+      if (result.success) {
+        toast.success(successMessage)
+        router.refresh()
+      } else {
+        toast.error(result.error || 'Erro ao salvar ordem')
+      }
+    })
+  }
+
+  function moveTipo(index: number, direction: -1 | 1) {
+    const next = [...tiposOrdenados]
+    const targetIndex = index + direction
+    if (targetIndex < 0 || targetIndex >= next.length) return
+
+    const [item] = next.splice(index, 1)
+    next.splice(targetIndex, 0, item)
+    salvarOrdem(next.map((tipo) => tipo.nome), 'Ordem dos tipos atualizada')
+  }
+
+  function restaurarOrdemAlfabetica() {
+    const next = [...tiposOrdenados].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+    salvarOrdem(next.map((tipo) => tipo.nome), 'Tipos ordenados alfabeticamente')
   }
 
   return (
@@ -111,10 +149,27 @@ export default function ComponentesConfigContent({ tipos }: ComponentesConfigPro
           </Button>
         </form>
 
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-muted-foreground">
+            A ordem abaixo sera usada no filtro do estoque e na selecao de materiais nos pedidos.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={restaurarOrdemAlfabetica}
+            disabled={isPending || tiposOrdenados.length < 2}
+            className="w-full sm:w-auto"
+          >
+            <RotateCcw className="mr-2 h-4 w-4" />
+            Ordem alfabetica
+          </Button>
+        </div>
+
         <div className="overflow-x-auto rounded-lg border">
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
+                <TableHead className="w-[128px]">Ordem</TableHead>
                 <TableHead>Tipo</TableHead>
                 <TableHead>Categorias</TableHead>
                 <TableHead className="text-right">Materiais</TableHead>
@@ -125,13 +180,40 @@ export default function ComponentesConfigContent({ tipos }: ComponentesConfigPro
             <TableBody>
               {tipos.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
                     Nenhum tipo configurado ainda.
                   </TableCell>
                 </TableRow>
               ) : (
-                tipos.map((tipo) => (
+                tiposOrdenados.map((tipo, index) => (
                   <TableRow key={tipo.nome}>
+                    <TableCell>
+                      <div className="flex items-center gap-1 text-muted-foreground">
+                        <GripVertical className="h-4 w-4" />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => moveTipo(index, -1)}
+                          disabled={isPending || index === 0}
+                          aria-label={`Subir ${tipo.nome}`}
+                        >
+                          <ArrowUp className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => moveTipo(index, 1)}
+                          disabled={isPending || index === tiposOrdenados.length - 1}
+                          aria-label={`Descer ${tipo.nome}`}
+                        >
+                          <ArrowDown className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
                     <TableCell className="min-w-[220px] font-medium">
                       {editingTipo === tipo.nome ? (
                         <form

@@ -56,7 +56,7 @@ function formatQuantity(value: number) {
 
 function getStatusMessage(status: StatusPedido) {
   const messages: Record<StatusPedido, string> = {
-    orcamento: 'Seu pedido está em fase de orçamento e conferência dos detalhes.',
+    orcamento: 'Seu pedido está em conferência inicial dos detalhes.',
     confirmado: 'Seu pedido foi confirmado e já está na nossa fila de produção.',
     separando_materiais: 'Estamos separando os materiais para preparar sua peça com cuidado.',
     em_producao:

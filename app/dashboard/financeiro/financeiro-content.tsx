@@ -359,7 +359,7 @@ export function FinanceiroContent({
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
               {Object.entries(resumo.pedidosPorStatus).map(([status, count]) => {
                 const statusLabels: Record<string, { label: string; className: string }> = {
-                  orcamento: { label: 'Em Orçamento', className: 'bg-yellow-100 text-yellow-800' },
+                  orcamento: { label: 'Pendente', className: 'bg-yellow-100 text-yellow-800' },
                   confirmado: { label: 'Confirmado', className: 'bg-amber-100 text-amber-800' },
                   em_producao: { label: 'Em Produção', className: 'bg-blue-100 text-blue-800' },
                   pronto: { label: 'Pronto para Entrega', className: 'bg-emerald-100 text-emerald-800' },

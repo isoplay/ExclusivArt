@@ -7,6 +7,7 @@ import { createAuthenticatedClient } from '@/lib/auth'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Pedido, PedidoComItens, Produto, StatusPedido, Material, ProdutoMaterial } from '@/lib/types/database'
 import { arredondarParaCimaMeioReal } from '@/lib/utils'
+import { roundCurrency } from '@/lib/number'
 import { logServerError } from '@/lib/server-log'
 import { BRAND_NAME } from '@/lib/brand'
 import {
@@ -408,7 +409,7 @@ export async function createPedido(
       cliente_nome,
       cliente_contato: cliente_contato || null,
       prazo_entrega: prazo_entrega || null,
-      status: 'orcamento',
+      status: 'separando_materiais',
       prioridade,
       observacoes: observacoes || null,
       observacao_cliente,
@@ -980,6 +981,16 @@ export type PedidoItemMaterialInput = {
   quantidade: number
 }
 
+export type PedidoCustomizadoItemInput = {
+  categoria_id: string
+  quantidade_itens: number
+  componentes: Array<{ material_id: string; quantidade: number }>
+  margem_percentual?: number
+  mao_obra_valor?: number
+  valor_final_manual?: number | null
+  motivo_ajuste_preco?: string | null
+}
+
 export type PedidoCustomizadoInput = {
   cliente_nome: string
   cliente_telefone: string | null
@@ -991,11 +1002,54 @@ export type PedidoCustomizadoInput = {
   observacoes: string | null
   observacao_cliente?: string | null
   margem_percentual?: number
+  mao_obra_valor?: number
+  valor_final_manual?: number | null
+  motivo_ajuste_preco?: string | null
+  itens?: PedidoCustomizadoItemInput[]
+}
+
+function getPedidoCustomizadoItens(params: PedidoCustomizadoInput): PedidoCustomizadoItemInput[] {
+  if (Array.isArray(params.itens) && params.itens.length > 0) {
+    return params.itens
+  }
+
+  return [
+    {
+      categoria_id: params.categoria_id,
+      quantidade_itens: params.quantidade_itens,
+      componentes: params.componentes,
+      margem_percentual: params.margem_percentual,
+      mao_obra_valor: params.mao_obra_valor,
+      valor_final_manual: params.valor_final_manual,
+      motivo_ajuste_preco: params.motivo_ajuste_preco,
+    },
+  ]
+}
+
+function validatePedidoCustomizadoItem(item: PedidoCustomizadoItemInput) {
+  return (
+    isValidUuid(item.categoria_id) &&
+    isFiniteNumberInRange(item.quantidade_itens, 1, 10_000) &&
+    isFiniteNumberInRange(item.margem_percentual ?? 100, 0, 100_000) &&
+    isFiniteNumberInRange(item.mao_obra_valor ?? 0, 0, 9_999_999_999) &&
+    (item.valor_final_manual == null ||
+      isFiniteNumberInRange(item.valor_final_manual, 0, 9_999_999_999)) &&
+    String(item.motivo_ajuste_preco ?? '').length <= 500 &&
+    Array.isArray(item.componentes) &&
+    item.componentes.length >= 1 &&
+    item.componentes.length <= MAX_PEDIDO_COMPONENTS &&
+    item.componentes.every(
+      (component) =>
+        isValidUuid(component.material_id) &&
+        isFiniteNumberInRange(component.quantidade, 0.001, 100_000)
+    )
+  )
 }
 
 function validatePedidoCustomizadoInput(params: PedidoCustomizadoInput) {
+  const itens = getPedidoCustomizadoItens(params)
+
   if (
-    !isValidUuid(params.categoria_id) ||
     params.cliente_nome.trim().length < 1 ||
     params.cliente_nome.trim().length > 120 ||
     String(params.cliente_telefone ?? '').length > 80 ||
@@ -1003,21 +1057,134 @@ function validatePedidoCustomizadoInput(params: PedidoCustomizadoInput) {
     String(params.observacoes ?? '').length > 3000 ||
     String(params.observacao_cliente ?? '').length > 1200 ||
     (Boolean(params.prazo_entrega) && !isValidDateOnly(params.prazo_entrega)) ||
-    !isFiniteNumberInRange(params.quantidade_itens, 1, 10_000) ||
-    !isFiniteNumberInRange(params.margem_percentual ?? 100, 0, 100_000) ||
-    !Array.isArray(params.componentes) ||
-    params.componentes.length < 1 ||
-    params.componentes.length > MAX_PEDIDO_COMPONENTS ||
-    params.componentes.some(
-      (component) =>
-        !isValidUuid(component.material_id) ||
-        !isFiniteNumberInRange(component.quantidade, 0.001, 100_000)
-    )
+    itens.length < 1 ||
+    itens.length > MAX_PEDIDO_ITEMS ||
+    itens.some((item) => !validatePedidoCustomizadoItem(item))
   ) {
     return false
   }
 
   return true
+}
+
+function resolveValorFinalManual(valorCalculado: number, valorManual?: number | null) {
+  if (valorManual == null) return { valorFinal: valorCalculado, precoManual: false }
+  if (!Number.isFinite(valorManual) || valorManual < 0) {
+    return { valorFinal: valorCalculado, precoManual: false }
+  }
+
+  const valorFinal = roundCurrency(valorManual)
+  return {
+    valorFinal,
+    precoManual: Math.abs(valorFinal - valorCalculado) >= 0.01,
+  }
+}
+
+function buildPrecoAudit(valorCalculado: number, valorFinal: number, motivo?: string | null) {
+  const diferenca = roundCurrency(valorFinal - valorCalculado)
+  const percentual =
+    valorCalculado > 0 ? roundCurrency((diferenca / valorCalculado) * 100) : 0
+
+  return {
+    valor_calculado_total: valorCalculado,
+    preco_manual: Math.abs(diferenca) >= 0.01,
+    ajuste_manual_valor: diferenca,
+    ajuste_manual_percentual: percentual,
+    motivo_ajuste_preco: cleanOptionalText(motivo, 500),
+  }
+}
+
+async function buildPedidoCustomizadoItensAtomicos(
+  supabase: SupabaseClient,
+  params: PedidoCustomizadoInput
+) {
+  const itens = getPedidoCustomizadoItens(params)
+  const materialIds = Array.from(
+    new Set(itens.flatMap((item) => item.componentes.map((componente) => componente.material_id)))
+  )
+
+  const materiaisResult = await supabase
+    .from('materiais')
+    .select('id, nome, custo_unitario, quantidade, quantidade_atual')
+    .in('id', materialIds)
+    .eq('ativo', true)
+
+  if (materiaisResult.error || !materiaisResult.data) {
+    logServerError('pedidos_selected_materials_failed', materiaisResult.error, {
+      table: 'materiais',
+    })
+    return { success: false as const, error: 'Erro ao carregar materiais selecionados' }
+  }
+
+  const materiais = materiaisResult.data
+  const itensAtomicos = []
+  const faltantes: string[] = []
+
+  for (const item of itens) {
+    const quantidadeItens = Math.max(1, item.quantidade_itens || 1)
+    const margemPercentual = Math.max(0, item.margem_percentual ?? 100)
+    let custoMateriaisTotal = 0
+
+    for (const componente of item.componentes) {
+      const material = materiais.find((materialItem) => materialItem.id === componente.material_id)
+      if (!material) {
+        faltantes.push('Material nao encontrado')
+        continue
+      }
+
+      const quantidadeTotal = componente.quantidade * quantidadeItens
+      const estoqueAtual = material.quantidade_atual ?? material.quantidade ?? 0
+
+      if (estoqueAtual < quantidadeTotal) {
+        faltantes.push(`${material.nome}: estoque ${estoqueAtual}, necessario ${quantidadeTotal}`)
+      }
+
+      custoMateriaisTotal += (material.custo_unitario || 0) * quantidadeTotal
+    }
+
+    const produtoId = await resolveProdutoIdForCategoria(supabase, item.categoria_id)
+    if (!produtoId) {
+      return {
+        success: false as const,
+        error: 'Cadastre um produto antes de criar pedidos.',
+      }
+    }
+
+    const maodeobraTotal = Number(item.mao_obra_valor || 0)
+    const custoBase = custoMateriaisTotal + maodeobraTotal
+    const valorComMargem = custoBase * (1 + margemPercentual / 100)
+    const valorCalculado = arredondarParaCimaMeioReal(valorComMargem)
+    const { valorFinal } = resolveValorFinalManual(valorCalculado, item.valor_final_manual)
+    const precoAudit = buildPrecoAudit(
+      valorCalculado,
+      valorFinal,
+      item.motivo_ajuste_preco
+    )
+
+    itensAtomicos.push({
+      produto_id: produtoId,
+      quantidade: quantidadeItens,
+      valor_unitario: valorFinal / quantidadeItens,
+      ...precoAudit,
+      materiais: item.componentes.map((componente) => ({
+        material_id: componente.material_id,
+        quantidade: componente.quantidade * quantidadeItens,
+      })),
+    })
+  }
+
+  if (faltantes.length > 0) {
+    return {
+      success: false as const,
+      error: `Estoque insuficiente: ${faltantes.join(', ')}`,
+    }
+  }
+
+  return {
+    success: true as const,
+    itensAtomicos,
+    tipoProdutoId: itens[0]?.categoria_id,
+  }
 }
 
 export async function addMateriaisAoPedidoItem(
@@ -1098,92 +1265,14 @@ export async function createPedidoCustomizado(params: PedidoCustomizadoInput) {
       return { success: false, error: 'Dados do pedido invalidos' }
     }
 
-    const quantidadeItens = Math.max(1, params.quantidade_itens || 1)
     const validationError = validatePedidoBasico(params.cliente_nome, params.prazo_entrega)
 
     if (validationError) {
       return { success: false, error: validationError }
     }
 
-    if (quantidadeItens > 10000) {
-      return { success: false, error: 'Quantidade de itens invalida' }
-    }
-
-    const componentesSelecionados = params.componentes
-
-    if (componentesSelecionados.length === 0) {
-      return { success: false, error: 'Adicione pelo menos um componente ao pedido' }
-    }
-
-    // Get labor configuration
-    const { data: maodeobra } = await supabase
-      .from('configuracao_maodeobra')
-      .select('valor_maodeobra')
-      .eq('categoria_id', params.categoria_id)
-      .maybeSingle()
-
-    const materialIds = componentesSelecionados.map((componente) => componente.material_id)
-
-    const { data: materiaisData, error: materiaisError } = await supabase
-      .from('materiais')
-      .select('id, nome, custo_unitario, quantidade, quantidade_atual')
-      .in('id', materialIds)
-      .eq('ativo', true)
-
-    if (materiaisError || !materiaisData) {
-      logServerError('pedidos_selected_materials_failed', materiaisError, {
-        table: 'materiais',
-      })
-      return { success: false, error: 'Erro ao carregar materiais selecionados' }
-    }
-
-    // Preco do pedido: custo real de materiais + mao de obra, depois margem no total.
-    // O arredondamento entra uma unica vez, no valor final do pedido.
-
-    const margemPercentual = Math.max(0, params.margem_percentual ?? 100)
-
-    let custoMateriaisTotal = 0
-    const faltantes: string[] = []
-
-    for (const componente of componentesSelecionados) {
-      const material = materiaisData.find((item) => item.id === componente.material_id)
-      if (!material) {
-        faltantes.push('Material não encontrado')
-        continue
-      }
-
-      const quantidadeTotal = componente.quantidade * quantidadeItens
-      const estoqueAtual = material.quantidade_atual ?? material.quantidade ?? 0
-
-      if (estoqueAtual < quantidadeTotal) {
-        faltantes.push(
-          `${material.nome}: estoque ${estoqueAtual}, necessário ${quantidadeTotal}`
-        )
-      }
-
-      const custoUnit = material.custo_unitario || 0
-      custoMateriaisTotal += custoUnit * quantidadeTotal
-    }
-
-    if (faltantes.length > 0) {
-      return {
-        success: false,
-        error: `Estoque insuficiente: ${faltantes.join(', ')}`,
-      }
-    }
-
-    const maodeobraTotal = (maodeobra?.valor_maodeobra || 0) * quantidadeItens
-    const custoBase = custoMateriaisTotal + maodeobraTotal
-    const valorComMargem = custoBase * (1 + margemPercentual / 100)
-    const valorTotal = arredondarParaCimaMeioReal(valorComMargem)
-
-    const produtoId = await resolveProdutoIdForCategoria(supabase, params.categoria_id)
-    if (!produtoId) {
-      return {
-        success: false,
-        error: 'Cadastre um produto antes de criar pedidos.',
-      }
-    }
+    const itensResult = await buildPedidoCustomizadoItensAtomicos(supabase, params)
+    if (!itensResult.success) return itensResult
 
     const { data: pedidoId, error: pedidoError } = await supabase.rpc('criar_pedido_atomico', {
       p_pedido: {
@@ -1193,22 +1282,11 @@ export async function createPedidoCustomizado(params: PedidoCustomizadoInput) {
         prazo_entrega: params.prazo_entrega,
         status: 'separando_materiais',
         prioridade: 1,
-        valor_total: valorTotal,
         observacoes: params.observacoes,
         observacao_cliente: cleanOptionalText(params.observacao_cliente),
-        tipo_produto_id: params.categoria_id,
+        tipo_produto_id: itensResult.tipoProdutoId,
       },
-      p_itens: [
-        {
-          produto_id: produtoId,
-          quantidade: quantidadeItens,
-          valor_unitario: valorTotal / quantidadeItens,
-          materiais: componentesSelecionados.map((componente) => ({
-            material_id: componente.material_id,
-            quantidade: componente.quantidade * quantidadeItens,
-          })),
-        },
-      ],
+      p_itens: itensResult.itensAtomicos,
     })
 
     if (pedidoError || !pedidoId) {
@@ -1286,75 +1364,8 @@ export async function updatePedidoCustomizado(id: string, params: PedidoCustomiz
       return { success: true, lockedMaterials: true }
     }
 
-    const quantidadeItens = Math.max(1, params.quantidade_itens || 1)
-
-    if (quantidadeItens > 10000) {
-      return { success: false, error: 'Quantidade de itens invalida' }
-    }
-
-    const componentesSelecionados = params.componentes
-
-    if (componentesSelecionados.length === 0) {
-      return { success: false, error: 'Adicione pelo menos um componente ao pedido' }
-    }
-
-    const { data: maodeobra } = await supabase
-      .from('configuracao_maodeobra')
-      .select('valor_maodeobra')
-      .eq('categoria_id', params.categoria_id)
-      .maybeSingle()
-
-    const materialIds = componentesSelecionados.map((componente) => componente.material_id)
-
-    const { data: materiaisData, error: materiaisError } = await supabase
-      .from('materiais')
-      .select('id, nome, custo_unitario, quantidade, quantidade_atual')
-      .in('id', materialIds)
-
-    if (materiaisError || !materiaisData) {
-      return { success: false, error: 'Erro ao carregar materiais selecionados' }
-    }
-
-    const margemPercentual = Math.max(0, params.margem_percentual ?? 100)
-    let custoMateriaisTotal = 0
-    const faltantes: string[] = []
-
-    for (const componente of componentesSelecionados) {
-      const material = materiaisData.find((item) => item.id === componente.material_id)
-      if (!material) {
-        faltantes.push('Material nao encontrado')
-        continue
-      }
-
-      const quantidadeTotal = componente.quantidade * quantidadeItens
-      const estoqueAtual = material.quantidade_atual ?? material.quantidade ?? 0
-
-      if (estoqueAtual < quantidadeTotal) {
-        faltantes.push(`${material.nome}: estoque ${estoqueAtual}, necessario ${quantidadeTotal}`)
-      }
-
-      custoMateriaisTotal += (material.custo_unitario || 0) * quantidadeTotal
-    }
-
-    if (faltantes.length > 0) {
-      return {
-        success: false,
-        error: `Estoque insuficiente: ${faltantes.join(', ')}`,
-      }
-    }
-
-    const maodeobraTotal = (maodeobra?.valor_maodeobra || 0) * quantidadeItens
-    const custoBase = custoMateriaisTotal + maodeobraTotal
-    const valorComMargem = custoBase * (1 + margemPercentual / 100)
-    const valorTotal = arredondarParaCimaMeioReal(valorComMargem)
-
-    const produtoId = await resolveProdutoIdForCategoria(supabase, params.categoria_id)
-    if (!produtoId) {
-      return {
-        success: false,
-        error: 'Cadastre um produto antes de editar pedidos.',
-      }
-    }
+    const itensResult = await buildPedidoCustomizadoItensAtomicos(supabase, params)
+    if (!itensResult.success) return itensResult
 
     const { data: action, error: pedidoError } = await supabase.rpc(
       'atualizar_pedido_atomico',
@@ -1363,19 +1374,9 @@ export async function updatePedidoCustomizado(id: string, params: PedidoCustomiz
         p_pedido: {
           ...dadosBasicos,
           prioridade: 1,
-          tipo_produto_id: params.categoria_id,
+          tipo_produto_id: itensResult.tipoProdutoId,
         },
-        p_itens: [
-          {
-            produto_id: produtoId,
-            quantidade: quantidadeItens,
-            valor_unitario: valorTotal / quantidadeItens,
-            materiais: componentesSelecionados.map((componente) => ({
-              material_id: componente.material_id,
-              quantidade: componente.quantidade * quantidadeItens,
-            })),
-          },
-        ],
+        p_itens: itensResult.itensAtomicos,
       }
     )
 

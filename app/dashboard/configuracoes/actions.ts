@@ -273,3 +273,63 @@ export async function alternarTipoComponente(nome: string, ativo: boolean) {
   revalidateConfiguracoesDependentes()
   return { success: true }
 }
+
+export async function ordenarTiposComponentes(nomes: string[]) {
+  const supabase = await createAuthenticatedClient()
+
+  if (!Array.isArray(nomes) || nomes.length === 0 || nomes.length > 200) {
+    return { success: false, error: 'Ordem invalida' }
+  }
+
+  const ordemPorTipo = new Map<string, number>()
+  nomes.forEach((nome, index) => {
+    const tipo = getCanonicalMaterialType(nome)
+    if (!tipo) return
+    const key = normalizeKey(tipo)
+    if (!ordemPorTipo.has(key)) {
+      ordemPorTipo.set(key, index + 1)
+    }
+  })
+
+  if (ordemPorTipo.size !== nomes.length) {
+    return { success: false, error: 'Lista de tipos invalida' }
+  }
+
+  const { data: grupos, error: gruposError } = await supabase
+    .from('grupos_componentes')
+    .select('id, nome')
+
+  if (gruposError) {
+    logServerError('config_order_component_types_lookup_failed', gruposError, {
+      table: 'grupos_componentes',
+    })
+    return { success: false, error: 'Nao foi possivel consultar os tipos' }
+  }
+
+  const updates = (grupos || [])
+    .map((grupo) => ({
+      id: grupo.id,
+      ordem: ordemPorTipo.get(normalizeKey(grupo.nome)),
+    }))
+    .filter((grupo): grupo is { id: string; ordem: number } => typeof grupo.ordem === 'number')
+
+  const results = await Promise.all(
+    updates.map((grupo) =>
+      supabase
+        .from('grupos_componentes')
+        .update({ ordem: grupo.ordem })
+        .eq('id', grupo.id)
+    )
+  )
+
+  const failed = results.find((result) => result.error)
+  if (failed?.error) {
+    logServerError('config_order_component_types_failed', failed.error, {
+      table: 'grupos_componentes',
+    })
+    return { success: false, error: 'Nao foi possivel salvar a ordem dos tipos' }
+  }
+
+  revalidateConfiguracoesDependentes()
+  return { success: true }
+}

@@ -278,10 +278,15 @@ export function EstoqueContent({
     () =>
       tiposComponentes
         .filter((tipo) => tipo.ativo)
-        .sort((a, b) =>
-          a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base', numeric: true })
-        ),
+        .sort((a, b) => {
+          if (a.ordem !== b.ordem) return a.ordem - b.ordem
+          return a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base', numeric: true })
+        }),
     [tiposComponentes]
+  )
+  const ordemTipo = useMemo(
+    () => new Map(tiposAtivos.map((tipo, index) => [normalizeKey(tipo.nome), index])),
+    [tiposAtivos]
   )
   const tiposValidos = useMemo(
     () => new Set(tiposAtivos.map((tipo) => normalizeKey(tipo.nome))),
@@ -334,9 +339,10 @@ export function EstoqueContent({
         ordem: 999,
       })
     }
-    return options.sort((a, b) =>
-      a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base', numeric: true })
-    )
+    return options.sort((a, b) => {
+      if (a.ordem !== b.ordem) return a.ordem - b.ordem
+      return a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base', numeric: true })
+    })
   }
 
   const materiaisSemTipo = materiais.filter(materialSemTipoValido)
@@ -359,10 +365,14 @@ export function EstoqueContent({
           numeric: true,
         })
       } else if (sortField === 'tipo') {
-        comparison = String(a.tipo ?? '').localeCompare(String(b.tipo ?? ''), 'pt-BR', {
-          sensitivity: 'base',
-          numeric: true,
-        })
+        const ordemA = ordemTipo.get(normalizeKey(a.tipo)) ?? 9999
+        const ordemB = ordemTipo.get(normalizeKey(b.tipo)) ?? 9999
+        comparison =
+          ordemA - ordemB ||
+          String(a.tipo ?? '').localeCompare(String(b.tipo ?? ''), 'pt-BR', {
+            sensitivity: 'base',
+            numeric: true,
+          })
       } else if (sortField === 'quantidade') {
         comparison = getEstoqueAtual(a) - getEstoqueAtual(b)
       } else {
