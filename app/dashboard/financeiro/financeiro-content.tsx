@@ -359,10 +359,12 @@ export function FinanceiroContent({
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
               {Object.entries(resumo.pedidosPorStatus).map(([status, count]) => {
                 const statusLabels: Record<string, { label: string; className: string }> = {
-                  orcamento: { label: 'Pendente', className: 'bg-yellow-100 text-yellow-800' },
-                  confirmado: { label: 'Confirmado', className: 'bg-amber-100 text-amber-800' },
+                  orcamento: { label: 'Orçamento', className: 'bg-yellow-100 text-yellow-800' },
+                  separando_material: { label: 'Separando material', className: 'bg-purple-100 text-purple-800' },
                   em_producao: { label: 'Em Produção', className: 'bg-blue-100 text-blue-800' },
-                  pronto: { label: 'Pronto para Entrega', className: 'bg-emerald-100 text-emerald-800' },
+                  pronto: { label: 'Pronto', className: 'bg-pink-100 text-pink-800' },
+                  pago: { label: 'Pago', className: 'bg-emerald-100 text-emerald-800' },
+                  pago_entregue: { label: 'Pago entregue', className: 'bg-teal-100 text-teal-800' },
                   entregue: { label: 'Entregue', className: 'bg-green-100 text-green-800' },
                   cancelado: { label: 'Cancelado', className: 'bg-red-100 text-red-800' },
                 }

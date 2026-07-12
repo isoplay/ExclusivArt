@@ -15,7 +15,7 @@ import {
 const validTrackingPayload = {
   cliente_nome: 'Cliente Teste',
   pedido_codigo: 'EXA-2026-A1B2C3D4',
-  status: 'confirmado',
+  status: 'separando_material',
   prazo_entrega: '2026-07-20',
   produto_resumo: 'Peça personalizada',
   quantidade_total: 2,

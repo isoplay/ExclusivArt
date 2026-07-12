@@ -29,7 +29,7 @@ export type HistoricoVendasChartItem = {
   quantidade: number
 }
 
-export type HistoricoVendaOrigem = 'papel' | 'pedido_pronto' | 'pedido_entregue'
+export type HistoricoVendaOrigem = 'papel' | 'pedido_pronto' | 'pedido_pago' | 'pedido_entregue'
 
 export type HistoricoVendaRegistro = {
   id: string
@@ -87,7 +87,7 @@ type PedidoHistoricoRow = {
   pedido_itens?: PedidoHistoricoItemRow[] | null
 }
 
-const PEDIDOS_HISTORICO_STATUS: StatusPedido[] = ['pronto', 'entregue']
+const PEDIDOS_HISTORICO_STATUS: StatusPedido[] = ['pronto', 'pago', 'pago_entregue', 'entregue']
 
 function sanitizeDate(value: unknown) {
   const date = String(value ?? '').trim()
@@ -188,7 +188,12 @@ function pedidoToHistoricoRegistro(pedido: PedidoHistoricoRow): HistoricoVendaRe
     descricao: buildPedidoHistoricoDescricao(pedido),
     quantidade: quantidade || 1,
     valor_total: toNumber(pedido.valor_total),
-    origem: pedido.status === 'entregue' ? 'pedido_entregue' : 'pedido_pronto',
+    origem:
+      pedido.status === 'pago'
+        ? 'pedido_pago'
+        : pedido.status === 'pago_entregue' || pedido.status === 'entregue'
+          ? 'pedido_entregue'
+          : 'pedido_pronto',
     observacoes: null,
     created_at: pedido.data_pedido,
     status_pedido: pedido.status,

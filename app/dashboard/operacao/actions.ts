@@ -25,10 +25,10 @@ type MovimentoComMaterial = MovimentacaoEstoque & {
 }
 
 const STATUS_PRODUCAO: StatusPedido[] = [
-  'confirmado',
-  'separando_materiais',
+  'separando_material',
   'em_producao',
   'pronto',
+  'pago',
 ]
 
 function getMonthRange() {
@@ -67,10 +67,12 @@ function groupByStatus(pedidos: PedidoComItens[]) {
 
 function summarizeFinance(pedidos: Pedido[], despesas: Despesa[]) {
   const receita = pedidos
-    .filter((pedido) => pedido.status === 'pronto' || pedido.status === 'entregue')
+    .filter((pedido) =>
+      ['pronto', 'pago', 'pago_entregue', 'entregue'].includes(pedido.status)
+    )
     .reduce((total, pedido) => total + toNumber(pedido.valor_total), 0)
   const receitaRecebida = pedidos
-    .filter((pedido) => pedido.status === 'entregue')
+    .filter((pedido) => ['pago', 'pago_entregue', 'entregue'].includes(pedido.status))
     .reduce((total, pedido) => total + toNumber(pedido.valor_total), 0)
   const receitaAberta = Math.max(0, receita - receitaRecebida)
   const totalDespesas = despesas.reduce((total, despesa) => total + toNumber(despesa.valor), 0)
@@ -212,7 +214,7 @@ export async function getOperacaoData() {
         `
         )
         .eq('ativo', true)
-        .in('status', ['confirmado', 'separando_materiais', 'em_producao', 'pronto'])
+        .in('status', ['separando_material', 'em_producao', 'pronto', 'pago'])
         .order('prazo_entrega', { ascending: true, nullsFirst: false }),
       supabase.from('materiais').select('*').eq('ativo', true).order('nome'),
       supabase

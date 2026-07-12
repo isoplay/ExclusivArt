@@ -84,6 +84,10 @@ function getOrigemConfig(origem: HistoricoVendaOrigem) {
       label: 'Pedido pronto',
       className: 'border-emerald-100 bg-emerald-50 text-emerald-700',
     },
+    pedido_pago: {
+      label: 'Pedido pago',
+      className: 'border-teal-100 bg-teal-50 text-teal-700',
+    },
     pedido_entregue: {
       label: 'Pedido entregue',
       className: 'border-green-100 bg-green-50 text-green-700',
@@ -520,7 +524,7 @@ export function HistoricoVendasContent({
         <CardHeader>
           <CardTitle>Histórico completo ({historico.vendas.length})</CardTitle>
           <CardDescription>
-            Vendas antigas ficam cadastradas aqui. Pedidos prontos ou entregues aparecem automaticamente como origem sincronizada.
+            Vendas antigas ficam cadastradas aqui. Pedidos prontos, pagos ou entregues aparecem automaticamente como origem sincronizada.
           </CardDescription>
         </CardHeader>
         <CardContent>

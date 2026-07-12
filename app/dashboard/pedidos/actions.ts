@@ -213,10 +213,11 @@ async function buildAtomicPedidoItems(
 
 const statusPermitidos: StatusPedido[] = [
   'orcamento',
-  'confirmado',
-  'separando_materiais',
+  'separando_material',
   'em_producao',
   'pronto',
+  'pago',
+  'pago_entregue',
   'entregue',
   'cancelado',
 ]
@@ -409,7 +410,7 @@ export async function createPedido(
       cliente_nome,
       cliente_contato: cliente_contato || null,
       prazo_entrega: prazo_entrega || null,
-      status: 'separando_materiais',
+      status: 'separando_material',
       prioridade,
       observacoes: observacoes || null,
       observacao_cliente,
@@ -1280,7 +1281,7 @@ export async function createPedidoCustomizado(params: PedidoCustomizadoInput) {
         cliente_contato: params.cliente_telefone,
         cliente_endereco: params.cliente_endereco,
         prazo_entrega: params.prazo_entrega,
-        status: 'separando_materiais',
+        status: 'separando_material',
         prioridade: 1,
         observacoes: params.observacoes,
         observacao_cliente: cleanOptionalText(params.observacao_cliente),

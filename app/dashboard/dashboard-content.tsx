@@ -88,11 +88,12 @@ type DashboardMetrics = {
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  orcamento: 'Pendente',
-  confirmado: 'Confirmado',
-  separando_materiais: 'Separando materiais',
+  orcamento: 'Orçamento',
+  separando_material: 'Separando material',
   em_producao: 'Em produção',
   pronto: 'Pronto',
+  pago: 'Pago',
+  pago_entregue: 'Pago entregue',
   entregue: 'Entregue',
   cancelado: 'Cancelado',
 }
@@ -303,9 +304,10 @@ function StatusSummaryCard({ statusList }: { statusList: PedidoStatusResumo[] })
       .reduce((acc, item) => acc + item.total, 0)
 
   const groups = [
-    { label: 'Concluído', total: getTotal('entregue', 'pronto'), color: 'bg-emerald-500' },
-    { label: 'Em produção', total: getTotal('em_producao', 'separando_materiais'), color: 'bg-sky-500' },
-    { label: 'Pendente', total: getTotal('orcamento', 'confirmado'), color: 'bg-amber-500' },
+    { label: 'Entregue', total: getTotal('pago_entregue', 'entregue'), color: 'bg-emerald-500' },
+    { label: 'Pago', total: getTotal('pago'), color: 'bg-teal-500' },
+    { label: 'Produção', total: getTotal('separando_material', 'em_producao', 'pronto'), color: 'bg-sky-500' },
+    { label: 'Orçamento', total: getTotal('orcamento'), color: 'bg-amber-500' },
     { label: 'Cancelado', total: getTotal('cancelado'), color: 'bg-rose-500' },
   ].filter((group) => group.total > 0)
 
@@ -500,7 +502,7 @@ export function DashboardContent({
         <MetricCard
           title="Pedidos Pendentes"
           value={metrics.pedidosPendentes}
-          description="aguardando produção"
+          description="em aberto"
           icon={Clock}
           tone="amber"
         />
@@ -541,7 +543,7 @@ export function DashboardContent({
         <LifetimeSalesCard
           title="Receita atual"
           value={metrics.receitaPedidosSistema}
-          description="Somente pedidos prontos ou entregues, sem vendas antigas."
+          description="Pedidos prontos, pagos ou entregues, sem vendas antigas."
           icon={ShoppingCart}
         />
         <LifetimeSalesCard

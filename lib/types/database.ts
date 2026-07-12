@@ -47,10 +47,11 @@ export type ProdutoComMateriais = Produto & {
 
 export type StatusPedido =
   | 'orcamento'
-  | 'confirmado'
-  | 'separando_materiais'
+  | 'separando_material'
   | 'em_producao'
   | 'pronto'
+  | 'pago'
+  | 'pago_entregue'
   | 'entregue'
   | 'cancelado'
 
@@ -59,11 +60,12 @@ export const STATUS_PEDIDO_OPTIONS: {
   label: string
   className: string
 }[] = [
-  { value: 'orcamento', label: 'Pendente', className: 'bg-yellow-100 text-yellow-800' },
-  { value: 'confirmado', label: 'Confirmado', className: 'bg-amber-100 text-amber-800' },
-  { value: 'separando_materiais', label: 'Separando Materiais', className: 'bg-purple-100 text-purple-800' },
-  { value: 'em_producao', label: 'Em Produção', className: 'bg-blue-100 text-blue-800' },
-  { value: 'pronto', label: 'Pronto para Entrega', className: 'bg-pink-100 text-pink-800' },
+  { value: 'orcamento', label: 'Orçamento', className: 'bg-yellow-100 text-yellow-800' },
+  { value: 'separando_material', label: 'Separando material', className: 'bg-purple-100 text-purple-800' },
+  { value: 'em_producao', label: 'Em produção', className: 'bg-blue-100 text-blue-800' },
+  { value: 'pronto', label: 'Pronto', className: 'bg-pink-100 text-pink-800' },
+  { value: 'pago', label: 'Pago', className: 'bg-emerald-100 text-emerald-800' },
+  { value: 'pago_entregue', label: 'Pago entregue', className: 'bg-teal-100 text-teal-800' },
   { value: 'entregue', label: 'Entregue', className: 'bg-emerald-100 text-emerald-800' },
   { value: 'cancelado', label: 'Cancelado', className: 'bg-red-100 text-red-800' },
 ]

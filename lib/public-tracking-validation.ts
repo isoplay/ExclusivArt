@@ -14,10 +14,11 @@ export function isValidPublicToken(value: unknown): value is string {
 
 const statusPedidoSchema = z.enum([
   'orcamento',
-  'confirmado',
-  'separando_materiais',
+  'separando_material',
   'em_producao',
   'pronto',
+  'pago',
+  'pago_entregue',
   'entregue',
   'cancelado',
 ])

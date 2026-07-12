@@ -42,10 +42,10 @@ function formatDate(value?: string | null) {
 
 function statusLabel(status: string) {
   const labels: Record<string, string> = {
-    confirmado: 'Confirmado',
-    separando_materiais: 'Separando',
+    separando_material: 'Separando',
     em_producao: 'Em producao',
     pronto: 'Pronto',
+    pago: 'Pago',
   }
 
   return labels[status] ?? status.replace(/_/g, ' ')
@@ -167,7 +167,7 @@ export function OperacaoContent({ data }: { data: OperacaoData }) {
         <SummaryCard
           title="Pedidos ativos"
           value={String(data.resumo.pedidosAtivos)}
-          description="confirmados ate prontos"
+          description="em producao ate pagos"
           icon={ClipboardList}
         />
         <SummaryCard

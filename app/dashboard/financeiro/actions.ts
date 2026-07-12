@@ -252,7 +252,7 @@ export async function getFinanceiroResumo(mes: number, ano: number) {
   }
 
   const receita = (pedidos || []).reduce((acc: number, p: Pedido) => {
-    if (p.status === 'pronto' || p.status === 'entregue') {
+    if (['pronto', 'pago', 'pago_entregue', 'entregue'].includes(p.status)) {
       return acc + p.valor_total
     }
     return acc

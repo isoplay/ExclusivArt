@@ -52,16 +52,8 @@ const statusStyles: Record<TrackingStatus, StatusStyle> = {
     bead: 'bg-[#E3DAF4] text-[#333333]',
     glow: 'rgba(200,189,233,0.28)',
   },
-  confirmado: {
-    label: 'Confirmado',
-    badge: 'border-[#D8CFED] bg-[#E3DAF4]/80 text-[#4F4261]',
-    dot: 'bg-[#BDADE4]',
-    panel: 'border-[#D8CFED] bg-[#F5F3FA]/88',
-    bead: 'bg-[#C8BDE9] text-[#333333]',
-    glow: 'rgba(200,189,233,0.38)',
-  },
-  separando_materiais: {
-    label: 'Separando materiais',
+  separando_material: {
+    label: 'Separando material',
     badge: 'border-[#D4C1F1] bg-[#E8DCF8]/88 text-[#5F3C8A]',
     dot: 'bg-[#A98BDC]',
     panel: 'border-[#D4C1F1] bg-[#F7F2FC]/88',
@@ -77,12 +69,28 @@ const statusStyles: Record<TrackingStatus, StatusStyle> = {
     glow: 'rgba(200,189,233,0.46)',
   },
   pronto: {
-    label: 'Pronto para entrega',
+    label: 'Pronto',
     badge: 'border-emerald-200 bg-emerald-50 text-emerald-800',
     dot: 'bg-[#81C784]',
     panel: 'border-emerald-200 bg-emerald-50/70',
     bead: 'bg-[#A5D6A7] text-[#244728]',
     glow: 'rgba(129,199,132,0.42)',
+  },
+  pago: {
+    label: 'Pago',
+    badge: 'border-emerald-300 bg-emerald-100 text-emerald-900',
+    dot: 'bg-emerald-500',
+    panel: 'border-emerald-300 bg-emerald-50',
+    bead: 'bg-emerald-500 text-white',
+    glow: 'rgba(16,185,129,0.38)',
+  },
+  pago_entregue: {
+    label: 'Pago entregue',
+    badge: 'border-teal-300 bg-teal-100 text-teal-900',
+    dot: 'bg-teal-600',
+    panel: 'border-teal-300 bg-teal-50',
+    bead: 'bg-teal-600 text-white',
+    glow: 'rgba(13,148,136,0.36)',
   },
   entregue: {
     label: 'Entregue',
@@ -104,10 +112,11 @@ const statusStyles: Record<TrackingStatus, StatusStyle> = {
 
 const timelineSteps: TimelineStep[] = [
   { status: 'orcamento', label: 'Orçamento' },
-  { status: 'confirmado', label: 'Confirmado' },
-  { status: 'separando_materiais', label: 'Separando materiais' },
+  { status: 'separando_material', label: 'Separando material' },
   { status: 'em_producao', label: 'Em produção' },
-  { status: 'pronto', label: 'Pronto para entrega' },
+  { status: 'pronto', label: 'Pronto' },
+  { status: 'pago', label: 'Pago' },
+  { status: 'pago_entregue', label: 'Pago entregue' },
   { status: 'entregue', label: 'Entregue' },
 ]
 

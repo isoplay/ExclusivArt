@@ -57,12 +57,13 @@ function formatQuantity(value: number) {
 function getStatusMessage(status: StatusPedido) {
   const messages: Record<StatusPedido, string> = {
     orcamento: 'Seu pedido está em conferência inicial dos detalhes.',
-    confirmado: 'Seu pedido foi confirmado e já está na nossa fila de produção.',
-    separando_materiais: 'Estamos separando os materiais para preparar sua peça com cuidado.',
+    separando_material: 'Estamos separando os materiais para preparar sua peça com cuidado.',
     em_producao:
       'Seu pedido está sendo produzido com atenção aos detalhes. Assim que estiver pronto, avisaremos você pelo WhatsApp.',
     pronto:
       'Seu pedido está pronto para entrega. Em breve combinaremos os detalhes pelo WhatsApp.',
+    pago: 'O pagamento do seu pedido já foi registrado. Vamos combinar a entrega pelo WhatsApp.',
+    pago_entregue: `Seu pedido foi pago e entregue. Obrigada por confiar no trabalho da ${BRAND_NAME}.`,
     entregue: `Seu pedido foi entregue. Obrigada por confiar no trabalho da ${BRAND_NAME}.`,
     cancelado:
       `Este pedido foi cancelado. Se precisar de ajuda, fale com a ${BRAND_NAME} pelo WhatsApp.`,

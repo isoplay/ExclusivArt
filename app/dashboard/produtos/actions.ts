@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { parseDecimalInput } from '@/lib/number'
 import { createAuthenticatedClient } from '@/lib/auth'
-import { MATERIAL_TYPES } from '@/lib/material-types'
+import { getCanonicalMaterialType, MATERIAL_TYPES } from '@/lib/material-types'
 import { logServerError } from '@/lib/server-log'
 import {
   isFiniteNumberInRange,
@@ -22,6 +22,14 @@ function normalizeKey(value: string | null | undefined) {
 }
 
 const MAX_COMPOSICAO_ITEMS = 100
+
+type TipoComponenteSync = {
+  nome: string
+  descricao: null
+  obrigatorio: false
+  permite_multipla_selecao: false
+  ordem: number
+}
 
 function validateProdutoInput(
   nome: string,
@@ -56,18 +64,8 @@ async function syncTiposComponentesForCategoria(
   supabase: SupabaseClient,
   categoriaId: string
 ) {
-  const tiposMap = new Map(
-    MATERIAL_TYPES.map((tipo) => [
-      normalizeKey(tipo.nome),
-      {
-        nome: tipo.nome,
-        descricao: null,
-        obrigatorio: false,
-        permite_multipla_selecao: false,
-        ordem: tipo.ordem,
-      },
-    ])
-  )
+  const tipos = await getTiposComponentesParaSincronizar(supabase)
+  const tiposMap = new Map(tipos.map((tipo) => [normalizeKey(tipo.nome), tipo]))
 
   const { data: gruposCategoria } = await supabase
     .from('grupos_componentes')
@@ -98,6 +96,83 @@ async function syncTiposComponentesForCategoria(
   }
 
   return { success: true }
+}
+
+async function getTiposComponentesParaSincronizar(
+  supabase: SupabaseClient
+): Promise<TipoComponenteSync[]> {
+  const tiposMap = new Map<string, TipoComponenteSync>(
+    MATERIAL_TYPES.map((tipo) => [
+      normalizeKey(tipo.nome),
+      {
+        nome: tipo.nome,
+        descricao: null,
+        obrigatorio: false,
+        permite_multipla_selecao: false,
+        ordem: tipo.ordem,
+      },
+    ])
+  )
+
+  const [gruposResult, materiaisResult] = await Promise.all([
+    supabase
+      .from('grupos_componentes')
+      .select('nome, ordem')
+      .eq('ativo', true)
+      .order('ordem'),
+    supabase
+      .from('materiais')
+      .select('tipo')
+      .eq('ativo', true),
+  ])
+
+  if (gruposResult.error) {
+    logServerError('produtos_sync_component_types_groups_failed', gruposResult.error, {
+      table: 'grupos_componentes',
+    })
+  }
+
+  if (materiaisResult.error) {
+    logServerError('produtos_sync_component_types_materials_failed', materiaisResult.error, {
+      table: 'materiais',
+    })
+  }
+
+  for (const grupo of gruposResult.data || []) {
+    const nome = getCanonicalMaterialType(grupo.nome)
+    if (!nome) continue
+
+    const key = normalizeKey(nome)
+    const atual = tiposMap.get(key)
+    tiposMap.set(key, {
+      nome,
+      descricao: null,
+      obrigatorio: false,
+      permite_multipla_selecao: false,
+      ordem: Math.min(atual?.ordem ?? 999, grupo.ordem ?? 999),
+    })
+  }
+
+  for (const material of materiaisResult.data || []) {
+    const nome = getCanonicalMaterialType(material.tipo)
+    if (!nome) continue
+
+    const key = normalizeKey(nome)
+    if (!tiposMap.has(key)) {
+      tiposMap.set(key, {
+        nome,
+        descricao: null,
+        obrigatorio: false,
+        permite_multipla_selecao: false,
+        ordem: 999,
+      })
+    }
+  }
+
+  return Array.from(tiposMap.values()).sort((a, b) => {
+    if (a.ordem !== b.ordem) return a.ordem - b.ordem
+    return a.nome.localeCompare(b.nome, 'pt-BR')
+  })
 }
 
 async function syncProdutoComoCategoria(

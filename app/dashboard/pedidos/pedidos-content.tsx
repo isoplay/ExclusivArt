@@ -67,31 +67,34 @@ function openExternalUrl(url: string) {
 }
 
 const STATUS_COLORS: { [key: string]: string } = {
-  orcamento: 'bg-gray-100 text-gray-800',
-  confirmado: 'bg-blue-100 text-blue-800',
-  separando_materiais: 'bg-purple-100 text-purple-800',
-  em_producao: 'bg-yellow-100 text-yellow-800',
+  orcamento: 'bg-yellow-100 text-yellow-800',
+  separando_material: 'bg-purple-100 text-purple-800',
+  em_producao: 'bg-blue-100 text-blue-800',
   pronto: 'bg-pink-100 text-pink-800',
+  pago: 'bg-emerald-100 text-emerald-800',
+  pago_entregue: 'bg-teal-100 text-teal-800',
   entregue: 'bg-emerald-100 text-emerald-800',
   cancelado: 'bg-red-100 text-red-800',
 }
 
 const STATUS_OPTIONS: StatusPedido[] = [
   'orcamento',
-  'confirmado',
-  'separando_materiais',
+  'separando_material',
   'em_producao',
   'pronto',
+  'pago',
+  'pago_entregue',
   'entregue',
   'cancelado',
 ]
 
 const STATUS_LABELS: Record<StatusPedido, string> = {
-  orcamento: 'Pendente',
-  confirmado: 'Confirmado',
-  separando_materiais: 'Separando materiais',
+  orcamento: 'Orçamento',
+  separando_material: 'Separando material',
   em_producao: 'Em produção',
-  pronto: 'Pronto para entrega',
+  pronto: 'Pronto',
+  pago: 'Pago',
+  pago_entregue: 'Pago entregue',
   entregue: 'Entregue',
   cancelado: 'Cancelado',
 }
@@ -364,11 +367,12 @@ export function PedidosContent({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos status</SelectItem>
-                <SelectItem value="orcamento">Pendente</SelectItem>
-                <SelectItem value="confirmado">Confirmado</SelectItem>
-                <SelectItem value="separando_materiais">Separando Materiais</SelectItem>
+                <SelectItem value="orcamento">Orçamento</SelectItem>
+                <SelectItem value="separando_material">Separando material</SelectItem>
                 <SelectItem value="em_producao">Em Produção</SelectItem>
                 <SelectItem value="pronto">Pronto</SelectItem>
+                <SelectItem value="pago">Pago</SelectItem>
+                <SelectItem value="pago_entregue">Pago entregue</SelectItem>
                 <SelectItem value="entregue">Entregue</SelectItem>
                 <SelectItem value="cancelado">Cancelado</SelectItem>
               </SelectContent>
